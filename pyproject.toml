@@ -29,7 +29,7 @@ dev = [
 ]
 
 [tool.uv]
-package = false
+package = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
