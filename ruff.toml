@@ -13,6 +13,9 @@ select = [
 ]
 ignore = [
     "E501",   # line length (formatter handles)
+    "RUF001", # ambiguous unicode chars in strings (Chinese punctuation in MA is intentional)
+    "RUF002", # ambiguous unicode chars in docstrings
+    "RUF003", # ambiguous unicode chars in comments
 ]
 
 [format]
