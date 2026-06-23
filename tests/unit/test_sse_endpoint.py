@@ -1,4 +1,5 @@
 """POST /api/v1/chat/sse：体合法 → 200 + text/event-stream + 合法 SSE 帧序列。"""
+
 from __future__ import annotations
 
 import json

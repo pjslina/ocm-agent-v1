@@ -3,6 +3,7 @@
 调用顺序: configure_logging(level) 一次 -> bind_request_ctx(...) 在请求入口
 -> get_logger(__name__).info("event_name", **kv) 在业务代码中.
 """
+
 from __future__ import annotations
 
 import contextvars
@@ -23,9 +24,7 @@ _ctx_request_id: contextvars.ContextVar[str | None] = contextvars.ContextVar(
 _ctx_thread_id: contextvars.ContextVar[str | None] = contextvars.ContextVar(
     "thread_id", default=None
 )
-_ctx_w3: contextvars.ContextVar[str | None] = contextvars.ContextVar(
-    "w3_account", default=None
-)
+_ctx_w3: contextvars.ContextVar[str | None] = contextvars.ContextVar("w3_account", default=None)
 
 
 def bind_request_ctx(

@@ -3,6 +3,7 @@
 设计书 §2.1。M0 阶段先把字段全声明出来，让后续里程碑的节点能直接 import；
 LangGraph 真正用它（编译图、跑节点）是 M1 的任务。
 """
+
 from __future__ import annotations
 
 from operator import add
@@ -16,14 +17,14 @@ class GraphState(TypedDict, total=False):
     request_id: str
     biz_id: str
     thread_id: str
-    identity: Any            # AuthnIdentity，M5+ 落地具体类型
+    identity: Any  # AuthnIdentity，M5+ 落地具体类型
     question: str
     biz_params: dict[str, Any]
-    history: list[Any]       # list[Message]，M1 落地 Message 模型
+    history: list[Any]  # list[Message]，M1 落地 Message 模型
 
     # ── 鉴权区 ─────────────────────────
     user_ctx: dict[str, Any]
-    auth: Any                # AuthResult，M1 落地
+    auth: Any  # AuthResult，M1 落地
 
     # ── 补全区 ─────────────────────────
     enriched_question: str

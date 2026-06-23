@@ -1,5 +1,6 @@
 """结构化日志: 每条日志必带 request_id/thread_id/w3_account (contextvars 注入),
 且敏感字段 (authorization/cookie/token/x-api-key) 必被脱敏为 ***."""
+
 from __future__ import annotations
 
 import json
@@ -13,6 +14,7 @@ import pytest
 def reset_structlog() -> None:
     """每个测试都重新 configure, 避免 processor 链跨用例污染."""
     import structlog
+
     structlog.reset_defaults()
     structlog.contextvars.clear_contextvars()
 

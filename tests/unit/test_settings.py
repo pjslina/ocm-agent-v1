@@ -2,6 +2,7 @@
 
 M0 只覆盖最少 env / log_level，其它字段在后续里程碑接入对应基础设施时再加。
 """
+
 from __future__ import annotations
 
 import pytest

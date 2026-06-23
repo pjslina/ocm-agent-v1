@@ -3,6 +3,7 @@
 把 ChatService.handle() 产出的 ChatEvent 异步流编码成 SSE 响应。
 设计书 §4.2 / §4.7.1。
 """
+
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
@@ -40,9 +41,7 @@ async def chat_sse(
     x_request_id: str | None = Header(default=None),
 ) -> StreamingResponse:
     rid = x_request_id or _new_request_id()
-    bind_request_ctx(
-        request_id=rid, thread_id=body.thread_id, w3_account=body.w3_account
-    )
+    bind_request_ctx(request_id=rid, thread_id=body.thread_id, w3_account=body.w3_account)
     log.info("chat_started", biz_id=body.biz_id)
 
     svc: ChatService = request.app.state.chat_service

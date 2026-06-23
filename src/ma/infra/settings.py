@@ -1,4 +1,5 @@
 """全局 Settings：所有环境配置的唯一入口。任何缺失项启动即崩溃。"""
+
 from __future__ import annotations
 
 from typing import Literal

@@ -3,6 +3,7 @@
 参见设计书 §4.2.2：7 种事件类型 meta/thinking/progress/delta/tool/error/done。
 SSE 规范：`event:` `data:` `id:` 三类字段，事件之间空行分隔。
 """
+
 from __future__ import annotations
 
 import json

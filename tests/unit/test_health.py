@@ -1,4 +1,5 @@
 """/healthz 任何时候 200；/readyz 启动期可能 503，settings 就绪后 200。"""
+
 from __future__ import annotations
 
 import pytest

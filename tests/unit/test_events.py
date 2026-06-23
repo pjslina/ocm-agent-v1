@@ -1,4 +1,5 @@
 """ChatEvent 与 SSE 编码：7 种 type 全覆盖；编码格式严格遵守 SSE 规范。"""
+
 from __future__ import annotations
 
 import json
@@ -52,9 +53,7 @@ def test_event_sse_frame_data_is_single_line_json() -> None:
         data={"thread_id": "th_1", "message_id": "msg_1", "route": "metagc"},
     )
     frame = encode_sse(ev)
-    data_lines = [
-        ln for ln in frame.rstrip("\n").splitlines() if ln.startswith("data: ")
-    ]
+    data_lines = [ln for ln in frame.rstrip("\n").splitlines() if ln.startswith("data: ")]
     assert len(data_lines) == 1
 
 
@@ -102,9 +101,7 @@ async def test_chat_service_yields_at_least_one_delta() -> None:
     from ma.core.chat_service import ChatRequest, ChatService
 
     svc = ChatService()
-    req = ChatRequest(
-        biz_id="x", thread_id="y", w3_account="z", question="hi", request_id="r1"
-    )
+    req = ChatRequest(biz_id="x", thread_id="y", w3_account="z", question="hi", request_id="r1")
     deltas = [ev async for ev in svc.handle(req) if ev.type == "delta"]
     assert len(deltas) >= 1
     for d in deltas:

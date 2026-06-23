@@ -5,6 +5,7 @@
     async def handle(req: ChatRequest) -> AsyncIterator[ChatEvent]
 这样 Transport 层（SSE/WS）从 M0 起就不用再改。
 """
+
 from __future__ import annotations
 
 import asyncio

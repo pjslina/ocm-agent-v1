@@ -3,6 +3,7 @@
 readyz 的 ready 标志由 lifespan 在所有启动检查通过后置 True；
 shutdown 时置回 False，让 K8s 30s 内摘流量（设计书 §8.4.3）。
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
