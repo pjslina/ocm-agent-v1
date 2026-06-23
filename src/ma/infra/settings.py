@@ -21,3 +21,7 @@ class Settings(BaseSettings):
 
     env: Literal["dev", "test", "staging", "prod"]
     log_level: Literal["debug", "info", "warning", "error"] = "info"
+
+    # ── 可观测性 ──────────────────────
+    otel_exporter_otlp_endpoint: str | None = None
+    otel_service_name: str = "master-agent"

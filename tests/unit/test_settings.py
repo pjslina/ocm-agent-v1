@@ -45,3 +45,15 @@ def test_settings_default_log_level(monkeypatch: pytest.MonkeyPatch) -> None:
 
     s = Settings()
     assert s.log_level == "info"
+
+
+def test_otel_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("MA_ENV", "dev")
+    monkeypatch.delenv("MA_OTEL_EXPORTER_OTLP_ENDPOINT", raising=False)
+    monkeypatch.delenv("MA_OTEL_SERVICE_NAME", raising=False)
+
+    from ma.infra.settings import Settings
+
+    s = Settings()
+    assert s.otel_exporter_otlp_endpoint is None
+    assert s.otel_service_name == "master-agent"
