@@ -1,0 +1,20 @@
+target-version = "py312"
+line-length = 100
+src = ["src", "tests"]
+
+[lint]
+select = [
+    "E", "F", "W",       # pycodestyle + pyflakes
+    "I",                  # isort
+    "B",                  # bugbear
+    "UP",                 # pyupgrade
+    "ASYNC",              # async pitfalls
+    "RUF",                # ruff-specific
+]
+ignore = [
+    "E501",   # line length (formatter handles)
+]
+
+[format]
+quote-style = "double"
+indent-style = "space"
