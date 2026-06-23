@@ -4,8 +4,9 @@
 1. 加载 Settings → 失败即退出
 2. configure logging
 3. configure tracing
-4. mark_ready
-5. 接流量
+4. 装配 ChatService 到 app.state
+5. mark_ready
+6. 接流量
 """
 from __future__ import annotations
 
@@ -14,7 +15,8 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from ma.api import health
+from ma.api import health, sse
+from ma.core.chat_service import ChatService
 from ma.infra.logging import configure_logging, get_logger
 from ma.infra.settings import Settings
 from ma.infra.tracing import configure_tracing
@@ -27,9 +29,9 @@ def create_app() -> FastAPI:
     log = get_logger("ma.main")
 
     @asynccontextmanager
-    async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+    async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         log.info("startup_begin", env=settings.env)
-        # 后续里程碑：在此处初始化 DB pool / 加载 plugins / 编译 topics
+        app.state.chat_service = ChatService()
         health.mark_ready()
         log.info("startup_complete")
         yield
@@ -42,6 +44,7 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
     app.include_router(health.router, prefix="/api/v1")
+    app.include_router(sse.router, prefix="/api/v1")
     return app
 
 
