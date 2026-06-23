@@ -75,3 +75,59 @@ def test_event_data_must_be_json_serializable() -> None:
     ev = ChatEvent(type="delta", data={"obj": NotSerializable()})  # type: ignore[dict-item]
     with pytest.raises(TypeError):
         encode_sse(ev)
+
+
+# ────────────────────────── ChatService 骨架 ──────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_chat_service_yields_meta_first_done_last() -> None:
+    from ma.core.chat_service import ChatRequest, ChatService
+
+    svc = ChatService()
+    req = ChatRequest(
+        biz_id="daibiao_xiaoguanjia",
+        thread_id="th_test",
+        w3_account="zhangsan",
+        question="hello",
+        request_id="req_test",
+    )
+    events = [ev async for ev in svc.handle(req)]
+    assert events[0].type == "meta"
+    assert events[-1].type == "done"
+
+
+@pytest.mark.asyncio
+async def test_chat_service_yields_at_least_one_delta() -> None:
+    from ma.core.chat_service import ChatRequest, ChatService
+
+    svc = ChatService()
+    req = ChatRequest(
+        biz_id="x", thread_id="y", w3_account="z", question="hi", request_id="r1"
+    )
+    deltas = [ev async for ev in svc.handle(req) if ev.type == "delta"]
+    assert len(deltas) >= 1
+    for d in deltas:
+        assert "content" in d.data
+
+
+@pytest.mark.asyncio
+async def test_chat_service_meta_contains_thread_id_and_request_id() -> None:
+    from ma.core.chat_service import ChatRequest, ChatService
+
+    svc = ChatService()
+    req = ChatRequest(
+        biz_id="b",
+        thread_id="th_xyz",
+        w3_account="z",
+        question="q",
+        request_id="req_xyz",
+    )
+    first = None
+    async for ev in svc.handle(req):
+        first = ev
+        break
+    assert first is not None
+    assert first.type == "meta"
+    assert first.data["thread_id"] == "th_xyz"
+    assert first.data["request_id"] == "req_xyz"
