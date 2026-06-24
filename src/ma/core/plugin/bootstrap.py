@@ -12,8 +12,8 @@ def load_all_plugins() -> None:
 
     每个插件模块 import 一次就够 —— 装饰器副作用把类注册进 registry。
     """
-    import ma.plugins.auth.representative_auth  # noqa: F401
+    import ma.plugins.auth.representative_auth
+    import ma.plugins.enrich.generic_enrich  # noqa: F401
     # 后续 task 加：
-    # import ma.plugins.enrich.generic_enrich
     # import ma.plugins.intent.llm_classifier
     # import ma.plugins.adapter.metagc
