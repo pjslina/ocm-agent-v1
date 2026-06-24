@@ -38,6 +38,22 @@
 5. **OTel 全采 + provider 在 main.py 启动时 set**：M1 加 LangGraph 节点 span 时直接 `trace.get_tracer("ma.<module>")` 即可，不必重 set provider
 6. **`X-Request-Id` 透传机制已就位**：M1 起在 LangGraph 节点里只要从 ChatRequest.request_id 拿到，无须重新生成
 
+## 终评 Review 暴露的 M1 第 1 个 commit 应处理项（"M1 day-1 cleanup"）
+
+这 4 项语义相关、合并为一次 commit 完成，再开始 LangGraph 工作：
+
+1. **`_inject_ids` 不写 null**：`logging.py:48-50` 当前对未 bind 的请求把三个 ID 写为 `null` 进 JSON，会让 Kibana 过滤失真。改成"只在 ctxvar 非 None 时 setdefault"
+2. **统一 contextvars 机制**：`merge_contextvars` 已在 processor 链里但没人用；当前自写的 `_ctx_request_id` 等是冗余。改用 `structlog.contextvars.bind_contextvars(...)` 在 `bind_request_ctx` 内部调用，删 `_inject_ids` 和自写 ContextVars。test 已经在调 `clear_contextvars`，所以测试侧零改动
+3. **加 `trace_id` 注入到日志**：写一个 processor 读 `trace.get_current_span().get_span_context().trace_id`，让 log↔trace 在 ELK 侧能 join。M1 开始大量 LLM/下游调用之前必须就位
+4. **接入或移除 `opentelemetry-instrumentation-fastapi`**：依赖已在 pyproject 但未 instrument。要么在 `create_app` 里调 `FastAPIInstrumentor().instrument_app(app)` 形成 §6.4.1 的 `chat.request` 根 span，要么从 deps 删除。建议接入。
+
+终评其它 Minor 项（不阻塞 M1，按手感处理）：
+- `health._state` 模块级单例的 `_state.ready = False` 反射式测试 — M1 多组件 readiness 时再换成 `ReadinessRegistry`
+- `ulid-py` 已停维护 — 一行换 `python-ulid` 可做，可不做
+- `state.py 0%` 加 `# pragma: no cover` 让覆盖率报告更干净
+- `test_sse_endpoint.py` 没断言完整 5 帧序列 — 一行 `assert events == [...]` 锁死 M0 契约
+- `configure_tracing` 不幂等 — 多次 `create_app` 会触发 OTel 警告；M1 集成测试多起来后加 `if not isinstance(get_tracer_provider(), TracerProvider)` 守一下
+
 ## 出口验证清单
 
 - [x] 端到端 curl SSE 拿到合法 5 帧事件（meta/thinking/delta×2/done）
