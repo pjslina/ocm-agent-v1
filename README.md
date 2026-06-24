@@ -10,7 +10,12 @@
 
 ## 当前状态
 
-**M0 — 脚手架与骨架已落地。** 服务能起来、SSE 端点能返回合法 stub 事件流、结构化日志 + OTel + CI 全部联动。无业务逻辑（M1 开始接 LangGraph + DB）。
+**M1 — 代表小管家专题端到端跑通。**
+- POST /api/v1/chat/sse → 鉴权 → 补全 → 意图识别（fake LLM） → MetaGC adapter → SSE 7-type 流 → 落库 → done
+- 仅支持代表小管家一个专题（M2 加经营小助手 / 销售合同责任人）
+- MetaGC 用本地 mock server；真接入 M3
+- WebSocket 通道 M4
+- 完整测试套（unit + stream + integration + e2e），9 条流式契约（2 个推后到 M3/M4）
 
 ## 快速启动
 
@@ -37,6 +42,9 @@ make run
 | `MA_LOG_LEVEL` |  | `info` | `debug` / `info` / `warning` / `error` |
 | `MA_OTEL_EXPORTER_OTLP_ENDPOINT` |  | `None` | OTLP gRPC endpoint，留空则 trace 仅在内存中 |
 | `MA_OTEL_SERVICE_NAME` |  | `master-agent` | OTel resource attribute |
+| `MA_PG_DSN_RW` | 必填（生产） | — | OpenGauss / PG DSN |
+| `MA_METAGC_BASE_URL` | 必填（生产） | — | MetaGC 下游 base URL |
+| `MA_CONFIG_TOPICS_DIR` |  | `config/topics` | YAML 目录 |
 
 ## 手动验证 SSE
 

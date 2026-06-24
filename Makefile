@@ -1,9 +1,24 @@
-.PHONY: dev test lint type fmt check build run cov fmt-check
+.PHONY: dev test lint type fmt check build run cov fmt-check test-unit test-stream test-integration test-e2e test-all
 
 dev:
 	python -m uv sync --all-groups
 
 test:
+	python -m uv run pytest -v
+
+test-unit:
+	python -m uv run pytest tests/unit -v
+
+test-stream:
+	python -m uv run pytest tests/stream -v
+
+test-integration:
+	python -m uv run pytest tests/integration -v
+
+test-e2e:
+	python -m uv run pytest tests/e2e -v
+
+test-all:
 	python -m uv run pytest -v
 
 cov:

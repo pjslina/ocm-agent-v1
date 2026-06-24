@@ -23,6 +23,10 @@ WORKDIR /app
 COPY --from=builder /build/.venv /app/.venv
 COPY --from=builder /build/src /app/src
 COPY pyproject.toml /app/
+COPY config/ /app/config/
+COPY sql/ /app/sql/
+COPY prompts/ /app/prompts/
+COPY db/ /app/db/
 
 USER ma
 EXPOSE 8000
