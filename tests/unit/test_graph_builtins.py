@@ -58,7 +58,9 @@ async def test_load_session_creates_or_loads_and_fills_history() -> None:
 
 @pytest.mark.asyncio
 async def test_reject_node_emits_fixed_message_and_marks_complete() -> None:
-    """reject 节点把 reject_message 写到 answer_chunks。"""
+    """reject 节点把 reject_message 写到 answer_chunks 并 dispatch delta。"""
+    from unittest.mock import patch
+
     from ma.core.graph.builtins import make_reject_node
 
     error_messages = {"FORBIDDEN_TOPIC": "您暂无权限使用此专题", "INTERNAL": "服务异常"}
@@ -69,14 +71,26 @@ async def test_reject_node_emits_fixed_message_and_marks_complete() -> None:
     auth_result.reject_message = None  # 让 node 用 error_messages 兜底
 
     state = {"auth": auth_result}
-    out = await node(state, config={})
+    captured: list[tuple[str, dict]] = []
+
+    async def fake_dispatch(name: str, data: dict, *, config: dict) -> None:
+        captured.append((name, data))
+
+    with patch(
+        "langchain_core.callbacks.manager.adispatch_custom_event",
+        side_effect=fake_dispatch,
+    ):
+        out = await node(state, config={})
 
     assert out["answer_chunks"] == ["您暂无权限使用此专题"]
+    assert ("delta", {"content": "您暂无权限使用此专题"}) in captured
 
 
 @pytest.mark.asyncio
 async def test_reject_uses_plugin_provided_message_first() -> None:
-    """AuthPlugin 给的 reject_message 优先；error_messages 是兜底。"""
+    """AuthPlugin 给的 reject_message 优先；error_messages 是兜底。dispatch 内容应当是插件话术。"""
+    from unittest.mock import patch
+
     from ma.core.graph.builtins import make_reject_node
 
     error_messages = {"FORBIDDEN_TOPIC": "兜底话术"}
@@ -86,8 +100,19 @@ async def test_reject_uses_plugin_provided_message_first() -> None:
     auth_result.reject_code = "FORBIDDEN_TOPIC"
     auth_result.reject_message = "插件自定义话术"
     state = {"auth": auth_result}
-    out = await node(state, config={})
+    captured: list[tuple[str, dict]] = []
+
+    async def fake_dispatch(name: str, data: dict, *, config: dict) -> None:
+        captured.append((name, data))
+
+    with patch(
+        "langchain_core.callbacks.manager.adispatch_custom_event",
+        side_effect=fake_dispatch,
+    ):
+        out = await node(state, config={})
+
     assert out["answer_chunks"] == ["插件自定义话术"]
+    assert ("delta", {"content": "插件自定义话术"}) in captured
 
 
 @pytest.mark.asyncio

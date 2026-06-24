@@ -127,16 +127,24 @@ async def test_contract_8_retry_transparent_to_user_PLACEHOLDER():
 
 @pytest.mark.asyncio
 async def test_contract_9_auth_rejection_yields_done(make_service):
+    """鉴权失败 → reject 节点 dispatch delta + done。M2 修复（M1 简化已撤销）。"""
     svc, _ = make_service()
 
     async def fake_run(self, state, *, output: bool):
+        # 不应该被调到 —— auth 失败应直接跳到 reject
         yield ChatEvent(type="delta", data={"content": "should not appear"})
 
     with patch("ma.plugins.adapter.metagc.MetaGCAdapter.run", new=fake_run):
         events = await collect(svc, make_request(role="VIEWER"))
+
     assert events[-1].type == "done"
     deltas = [e for e in events if e.type == "delta"]
-    assert deltas == []
+    # M2: reject 节点真的下发了话术 delta
+    assert len(deltas) == 1
+    # 内容是 AuthPlugin 给的 "该专题仅限 REP 角色访问。"
+    assert "REP" in deltas[0].data["content"]
+    # adapter.run 不应被调到
+    assert "should not appear" not in deltas[0].data["content"]
 
 
 @pytest.mark.asyncio

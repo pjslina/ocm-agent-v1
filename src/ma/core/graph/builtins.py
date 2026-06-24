@@ -45,17 +45,25 @@ def make_load_session_node(
 
 
 def make_reject_node(error_messages: dict[str, str]) -> NodeFn:
-    """build reject 节点。优先用 AuthPlugin 给的 reject_message，否则用 error_messages 兜底。"""
+    """build reject 节点。优先用 AuthPlugin 给的 reject_message，否则用 error_messages 兜底。
+
+    M2 改动：除了写 answer_chunks（供 persist 节点拼），还通过 dispatch_custom_event
+    发一条 delta 事件，让前端真的看到话术。
+    """
 
     async def node(state: GraphState, config: dict[str, Any]) -> dict[str, Any]:
+        from langchain_core.callbacks.manager import adispatch_custom_event
+
         auth = state.get("auth")
-        text: str | None = None
+        text = None
         code = "INTERNAL"
         if auth is not None:
             code = getattr(auth, "reject_code", None) or "INTERNAL"
             text = getattr(auth, "reject_message", None)
         if not text:
             text = error_messages.get(code, error_messages.get("INTERNAL", "服务异常"))
+        # M2: 让前端看到话术
+        await adispatch_custom_event("delta", {"content": text}, config=config)  # type: ignore[arg-type]
         return {"answer_chunks": [text]}
 
     return node
