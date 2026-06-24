@@ -1,0 +1,57 @@
+topic_id: daibiao_xiaoguanjia
+display_name: 代表小管家
+default_route: metagc
+
+history:
+  max_turns: 10
+  scope: per_topic
+
+auth:
+  plugin: representative_auth
+  params:
+    required_role: REP
+
+enrich:
+  plugin: generic_enrich
+  params:
+    fields_to_inject: [region]
+
+intent:
+  plugin: llm_classifier
+  params:
+    provider: fake
+    model: fake-model
+    labels: [metagc]
+    prompt_template: prompts/intent/representative.txt
+    fake_responses:
+      - "route: metagc\nreason: 业务数据查询"
+
+graph:
+  nodes:
+    - id: metagc_adapter
+      adapter: metagc
+      output: true
+      params:
+        base_url: ${env:MA_METAGC_BASE_URL}
+        timeout_ms: 30000
+
+  edges:
+    - from: intent
+      type: conditional
+      route_by: route
+      mapping:
+        metagc: metagc_adapter
+
+biz_params_schema:
+  type: object
+  required: [region]
+  properties:
+    region:
+      type: string
+
+error_messages:
+  FORBIDDEN_TOPIC: "您暂无权限使用代表小管家。"
+  FORBIDDEN_SCOPE: "您当前的角色无法查询这部分数据。"
+  DOWNSTREAM_TIMEOUT: "服务繁忙，请稍后再试。"
+  DOWNSTREAM_ERROR: "查询遇到问题，请稍后再试或联系管理员。"
+  INTERNAL: "服务异常，请稍后再试。"
