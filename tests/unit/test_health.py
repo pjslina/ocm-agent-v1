@@ -7,8 +7,12 @@ from fastapi.testclient import TestClient
 
 
 @pytest.fixture
-def app(monkeypatch: pytest.MonkeyPatch):
+def app(monkeypatch: pytest.MonkeyPatch, tmp_path):
     monkeypatch.setenv("MA_ENV", "dev")
+    monkeypatch.delenv("MA_PG_DSN_RW", raising=False)
+    topics_dir = tmp_path / "topics"
+    topics_dir.mkdir()
+    monkeypatch.setenv("MA_CONFIG_TOPICS_DIR", str(topics_dir))
     from ma.main import create_app
 
     return create_app()
@@ -22,12 +26,7 @@ def test_healthz_returns_200(app) -> None:
 
 
 def test_readyz_returns_200_after_startup(app) -> None:
-    """create_app + TestClient lifespan completes → readyz=200.
-
-    Task 20 之后 ChatService 构造需要 (topic_registry, session_repo_factory, message_repo_factory)，
-    而 main.py 的 lifespan 仍在 Task 21 才完整装配。此用例在 Task 21 落地后恢复。
-    """
-    pytest.skip("rewired by Task 21 (main.py lifespan 完整装配)")
+    """create_app + TestClient lifespan completes → readyz=200."""
     client = TestClient(app)
     # TestClient context manager triggers lifespan
     with client:
