@@ -40,12 +40,20 @@ async def pg_dsn() -> AsyncIterator[str]:
     except ImportError:
         pytest.skip("testcontainers[postgres] not installed")
 
-    with PostgresContainer("postgres:16-alpine") as pg:
-        sync_dsn = pg.get_connection_url()
+    try:
+        pg_container = PostgresContainer("postgres:16-alpine")
+        pg_container.start()
+    except Exception as e:
+        pytest.skip(f"docker not available: {e}")
+        return
+    try:
+        sync_dsn = pg_container.get_connection_url()
         # asyncpg 不需要 sqlalchemy 的 driver 前缀
         async_dsn = sync_dsn.replace("postgresql+psycopg2", "postgresql")
         _alembic_upgrade(async_dsn)
         yield async_dsn
+    finally:
+        pg_container.stop()
 
 
 @pytest_asyncio.fixture
