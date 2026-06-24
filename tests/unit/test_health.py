@@ -7,8 +7,12 @@ from fastapi.testclient import TestClient
 
 
 @pytest.fixture
-def app(monkeypatch: pytest.MonkeyPatch):
+def app(monkeypatch: pytest.MonkeyPatch, tmp_path):
     monkeypatch.setenv("MA_ENV", "dev")
+    monkeypatch.delenv("MA_PG_DSN_RW", raising=False)
+    topics_dir = tmp_path / "topics"
+    topics_dir.mkdir()
+    monkeypatch.setenv("MA_CONFIG_TOPICS_DIR", str(topics_dir))
     from ma.main import create_app
 
     return create_app()

@@ -44,6 +44,38 @@ jobs:
           name: coverage-xml
           path: coverage.xml
 
+  integration:
+    runs-on: ubuntu-latest
+    needs: check
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: ma
+          POSTGRES_PASSWORD: ma
+          POSTGRES_DB: ma_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install uv
+        run: pip install uv==0.11.24
+      - name: Sync deps
+        run: uv sync --frozen --all-groups
+      - name: Run integration + e2e
+        env:
+          MA_ENV: test
+          MA_TEST_PG_DSN: postgresql://ma:ma@127.0.0.1:5432/ma_test
+        run: uv run pytest tests/integration tests/e2e -v
+
   docker:
     runs-on: ubuntu-latest
     needs: check

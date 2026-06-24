@@ -44,19 +44,24 @@ def test_logger_emits_json_with_event_and_timestamp(
 
 
 def test_contextvars_inject_three_ids(monkeypatch: pytest.MonkeyPatch) -> None:
-    from ma.infra.logging import (
-        bind_request_ctx,
-        configure_logging,
-        get_logger,
-    )
+    """绑定 3 个 ID 之后，后续日志自动带上；未绑定时不出现 null 字段。"""
+    from ma.infra.logging import bind_request_ctx, configure_logging, get_logger
 
     buf = StringIO()
-    _capture(monkeypatch, buf)
     configure_logging("info")
-    bind_request_ctx(request_id="req_1", thread_id="th_1", w3_account="zhangsan")
+    monkeypatch.setattr("sys.stdout", buf)
     log = get_logger("test")
-    log.info("auth_passed")
 
+    # 未 bind 时，三 ID 字段不应出现
+    log.info("startup_event")
+    first = json.loads(buf.getvalue().strip().splitlines()[-1])
+    assert "request_id" not in first
+    assert "thread_id" not in first
+    assert "w3_account" not in first
+
+    # bind 之后三 ID 出现
+    bind_request_ctx(request_id="req_1", thread_id="th_1", w3_account="zhangsan")
+    log.info("auth_passed")
     payload = json.loads(buf.getvalue().strip().splitlines()[-1])
     assert payload["request_id"] == "req_1"
     assert payload["thread_id"] == "th_1"
@@ -102,3 +107,40 @@ def test_log_level_filters(monkeypatch: pytest.MonkeyPatch) -> None:
     events = [p["event"] for p in payloads]
     assert "ignored_event" not in events
     assert "kept_event" in events
+
+
+def test_trace_id_injected_when_span_active(monkeypatch: pytest.MonkeyPatch) -> None:
+    """在 active span 内打日志：自动带 trace_id（32-char hex）。"""
+    from opentelemetry import trace
+    from opentelemetry.sdk.trace import TracerProvider
+
+    from ma.infra.logging import configure_logging, get_logger
+
+    if not isinstance(trace.get_tracer_provider(), TracerProvider):
+        trace.set_tracer_provider(TracerProvider())
+
+    buf = StringIO()
+    configure_logging("info")
+    monkeypatch.setattr("sys.stdout", buf)
+    tracer = trace.get_tracer("test")
+    log = get_logger("test")
+    with tracer.start_as_current_span("test_span"):
+        log.info("event_in_span")
+    payload = json.loads(buf.getvalue().strip().splitlines()[-1])
+    assert "trace_id" in payload
+    assert isinstance(payload["trace_id"], str)
+    assert len(payload["trace_id"]) == 32
+    assert all(c in "0123456789abcdef" for c in payload["trace_id"])
+
+
+def test_trace_id_absent_when_no_span(monkeypatch: pytest.MonkeyPatch) -> None:
+    """无 active span 时，trace_id 字段不出现（不写 null / 0000…）。"""
+    from ma.infra.logging import configure_logging, get_logger
+
+    buf = StringIO()
+    configure_logging("info")
+    monkeypatch.setattr("sys.stdout", buf)
+    log = get_logger("test")
+    log.info("event_outside_span")
+    payload = json.loads(buf.getvalue().strip().splitlines()[-1])
+    assert "trace_id" not in payload
