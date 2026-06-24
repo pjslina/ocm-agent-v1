@@ -15,6 +15,7 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 
 from ma.api import health, sse
 from ma.core.chat_service import ChatService
@@ -41,11 +42,12 @@ def create_app() -> FastAPI:
 
     app = FastAPI(
         title="MasterAgent",
-        version="0.0.1",
+        version="0.1.0",
         lifespan=lifespan,
     )
     app.include_router(health.router, prefix="/api/v1")
     app.include_router(sse.router, prefix="/api/v1")
+    FastAPIInstrumentor().instrument_app(app)
     return app
 
 

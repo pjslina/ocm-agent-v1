@@ -1,30 +1,22 @@
-"""structlog 配置: JSON 输出 + contextvars 三 ID 注入 + 敏感字段脱敏.
+"""structlog 配置：JSON 输出 + structlog.contextvars 自动注入 + OTel trace_id + 敏感字段脱敏。
 
-调用顺序: configure_logging(level) 一次 -> bind_request_ctx(...) 在请求入口
--> get_logger(__name__).info("event_name", **kv) 在业务代码中.
+调用顺序：configure_logging(level) 一次 → bind_request_ctx(...) 在请求入口
+→ get_logger(__name__).info("event_name", **kv) 在业务代码中。
 """
 
 from __future__ import annotations
 
-import contextvars
 import logging
 import sys
 from collections.abc import MutableMapping
 from typing import Any
 
 import structlog
+from opentelemetry import trace
 
 _SENSITIVE_KEYS = frozenset(
     {"authorization", "cookie", "token", "x-api-key", "x_api_key", "set-cookie"}
 )
-
-_ctx_request_id: contextvars.ContextVar[str | None] = contextvars.ContextVar(
-    "request_id", default=None
-)
-_ctx_thread_id: contextvars.ContextVar[str | None] = contextvars.ContextVar(
-    "thread_id", default=None
-)
-_ctx_w3: contextvars.ContextVar[str | None] = contextvars.ContextVar("w3_account", default=None)
 
 
 def bind_request_ctx(
@@ -33,21 +25,32 @@ def bind_request_ctx(
     thread_id: str | None = None,
     w3_account: str | None = None,
 ) -> None:
-    """在请求入口调用一次, 让后续日志自动带上三 ID."""
+    """在请求入口调用一次，让后续日志自动带上三 ID。
+
+    None 值跳过 —— 不写入 contextvars，因此 merge_contextvars 不会把 null 渲染到 JSON。
+    """
+    kv: dict[str, Any] = {}
     if request_id is not None:
-        _ctx_request_id.set(request_id)
+        kv["request_id"] = request_id
     if thread_id is not None:
-        _ctx_thread_id.set(thread_id)
+        kv["thread_id"] = thread_id
     if w3_account is not None:
-        _ctx_w3.set(w3_account)
+        kv["w3_account"] = w3_account
+    if kv:
+        structlog.contextvars.bind_contextvars(**kv)
 
 
-def _inject_ids(
+def _inject_trace_id(
     _logger: Any, _method: str, event_dict: MutableMapping[str, Any]
 ) -> MutableMapping[str, Any]:
-    event_dict.setdefault("request_id", _ctx_request_id.get())
-    event_dict.setdefault("thread_id", _ctx_thread_id.get())
-    event_dict.setdefault("w3_account", _ctx_w3.get())
+    """读当前 active span，把 trace_id 注入 event_dict。
+
+    无 active span 或 span context invalid 时不写。32-char hex 小写。
+    """
+    span = trace.get_current_span()
+    ctx = span.get_span_context()
+    if ctx.is_valid:
+        event_dict["trace_id"] = format(ctx.trace_id, "032x")
     return event_dict
 
 
@@ -61,29 +64,23 @@ def _sanitize(
 
 
 class _StdoutPrintLoggerFactory:
-    """每次构造 PrintLogger 都读取当前的 sys.stdout.
+    """structlog factory：每次 logger 调用都读当前 sys.stdout。
 
-    structlog 自带的 PrintLoggerFactory 会在工厂初始化时捕获 file 参数,
-    导致测试里 monkeypatch sys.stdout 之后仍写到原 stdout.
-    本工厂在每次 __call__ 时读取 sys.stdout, 配合
-    cache_logger_on_first_use=False 即可让测试用 monkeypatch 捕获输出.
+    用于支持 tests 用 monkeypatch.setattr(sys, "stdout", buf) 捕获日志输出。
     """
 
-    def __call__(self, *_args: Any) -> structlog.PrintLogger:
+    def __call__(self, *args: Any, **kwargs: Any) -> structlog.PrintLogger:
         return structlog.PrintLogger(file=sys.stdout)
 
 
 def configure_logging(level: str = "info") -> None:
-    """配置 structlog 全局处理链与 stdlib logging level.
-
-    多次调用幂等 (每次都会 reset).
-    """
+    """配置 structlog 全局处理链。多次调用幂等。"""
     log_level = getattr(logging, level.upper(), logging.INFO)
     logging.basicConfig(level=log_level, format="%(message)s", force=True)
     structlog.configure(
         processors=[
             structlog.contextvars.merge_contextvars,
-            _inject_ids,
+            _inject_trace_id,
             _sanitize,
             structlog.processors.add_log_level,
             structlog.processors.TimeStamper(fmt="iso", utc=True),
@@ -96,5 +93,5 @@ def configure_logging(level: str = "info") -> None:
 
 
 def get_logger(name: str | None = None) -> structlog.stdlib.BoundLogger:
-    """获取一个 structlog logger."""
+    """获取一个 structlog logger。"""
     return structlog.get_logger(name)  # type: ignore[no-any-return]
