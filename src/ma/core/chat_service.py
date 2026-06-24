@@ -28,7 +28,7 @@ from ma.core.graph.node_wrappers import (
     make_intent_node,
 )
 from ma.core.graph.state import AuthnIdentity, GraphState
-from ma.core.repo.models import Message
+from ma.core.repo.models import Message, SessionBizMismatchError
 from ma.core.topic.registry import TopicNotFound, TopicRegistry
 from ma.infra.logging import get_logger
 
@@ -115,7 +115,21 @@ class ChatService:
         )
 
         # 4) 持久化 user message（先于 graph 跑）
-        await self._persist_user_message(req)
+        try:
+            await self._persist_user_message(req)
+        except SessionBizMismatchError as e:
+            yield ChatEvent(
+                type="error",
+                data={
+                    "code": "BAD_REQUEST",
+                    "message": "thread_id 已绑定到其它专题，无法跨专题复用",
+                    "retryable": False,
+                    "detail": str(e),
+                    "request_id": req.request_id,
+                },
+            )
+            yield ChatEvent(type="done", data={"status": "failed"})
+            return
 
         # 5) 编译 StateGraph 并跑
         graph = self._build_graph(topic)

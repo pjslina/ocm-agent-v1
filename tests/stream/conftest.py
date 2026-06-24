@@ -25,18 +25,27 @@ class FakeSessionRepo:
     async def get_or_create(
         self, *, thread_id: str, biz_id: str, w3_account: str, ext=None
     ) -> Session:
-        if thread_id not in self.sessions:
-            self.sessions[thread_id] = Session(
-                thread_id=thread_id,
-                biz_id=biz_id,
-                w3_account=w3_account,
-                title=None,
-                status="active",
-                created_at=datetime.now(),
-                updated_at=datetime.now(),
-                last_message_at=None,
-                ext=ext or {},
-            )
+        if thread_id in self.sessions:
+            existing = self.sessions[thread_id]
+            if existing.biz_id != biz_id:
+                from ma.core.repo.models import SessionBizMismatchError
+
+                raise SessionBizMismatchError(
+                    f"thread_id={thread_id} already bound to biz_id={existing.biz_id}, "
+                    f"cannot reuse with biz_id={biz_id}"
+                )
+            return existing
+        self.sessions[thread_id] = Session(
+            thread_id=thread_id,
+            biz_id=biz_id,
+            w3_account=w3_account,
+            title=None,
+            status="active",
+            created_at=datetime.now(),
+            updated_at=datetime.now(),
+            last_message_at=None,
+            ext=ext or {},
+        )
         return self.sessions[thread_id]
 
     async def touch(self, thread_id: str) -> None: ...

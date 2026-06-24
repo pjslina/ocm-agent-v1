@@ -150,3 +150,32 @@ async def test_contract_9_auth_rejection_yields_done(make_service):
 @pytest.mark.asyncio
 async def test_contract_10_ws_multi_request_isolation_PLACEHOLDER():
     pytest.skip("WS channel deferred to M4")
+
+
+@pytest.mark.asyncio
+async def test_session_biz_mismatch_yields_bad_request(make_service):
+    """同一 thread_id 用两个 biz_id 请求 → BAD_REQUEST error + done。"""
+    from datetime import datetime
+
+    from ma.core.repo.models import Session
+
+    svc, (sess_repo, _) = make_service()
+
+    # 预填一个 session_repo 里的 session，绑到不同 biz_id
+    sess_repo.sessions["th_conflict"] = Session(
+        thread_id="th_conflict",
+        biz_id="some_other_topic",
+        w3_account="alice",
+        title=None,
+        status="active",
+        created_at=datetime.now(),
+        updated_at=datetime.now(),
+        last_message_at=None,
+        ext={},
+    )
+
+    events = await collect(svc, make_request(thread_id="th_conflict"))
+    error_evs = [e for e in events if e.type == "error"]
+    assert len(error_evs) == 1
+    assert error_evs[0].data["code"] == "BAD_REQUEST"
+    assert events[-1].type == "done"
