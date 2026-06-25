@@ -12,6 +12,7 @@ def load_all_plugins() -> None:
 
     每个插件模块 import 一次就够 —— 装饰器副作用把类注册进 registry。
     """
+    import ma.plugins.adapter.knowledge_center
     import ma.plugins.adapter.metagc
     import ma.plugins.adapter.uniioc
     import ma.plugins.auth.jingying_auth

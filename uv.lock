@@ -455,6 +455,7 @@ dependencies = [
     { name = "structlog" },
     { name = "ulid-py" },
     { name = "uvicorn", extra = ["standard"] },
+    { name = "websockets" },
 ]
 
 [package.dev-dependencies]
@@ -485,6 +486,7 @@ requires-dist = [
     { name = "structlog", specifier = ">=24.4,<25" },
     { name = "ulid-py", specifier = ">=1.1,<2" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.32,<0.33" },
+    { name = "websockets", specifier = ">=16.0" },
 ]
 
 [package.metadata.requires-dev]
