@@ -46,6 +46,31 @@ make run
 | `MA_METAGC_BASE_URL` | 必填（生产） | — | MetaGC 下游 base URL |
 | `MA_CONFIG_TOPICS_DIR` |  | `config/topics` | YAML 目录 |
 
+## 本地 OTel / Jaeger 验证
+
+```bash
+# 1. 启 Jaeger all-in-one（内存存储）
+docker run -d --name jaeger \
+  -p 16686:16686 \
+  -p 4317:4317 \
+  jaegertracing/all-in-one:latest
+
+# 2. 设置 MA 的 OTLP endpoint 指向 Jaeger
+export MA_OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317
+
+# 3. 启 MA
+uvicorn ma.main:app --port 8000
+
+# 4. 发一个请求
+curl -X POST http://localhost:8000/api/v1/chat/sse \
+  -H 'Content-Type: application/json' \
+  -H 'X-User-Role: REP' \
+  -d '{"biz_id":"daibiao_xiaoguanjia","thread_id":"th_jaeger","w3_account":"alice","question":"测试","biz_params":{"region":"huadong"}}'
+
+# 5. 打开 Jaeger UI → http://localhost:16686
+#    搜索 service=ma，应能看到 graph.node.* spans + llm.classify span
+```
+
 ## 手动验证 SSE
 
 ```bash
