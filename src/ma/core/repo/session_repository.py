@@ -33,6 +33,7 @@ class SessionRepository:
 
     - get_or_create(thread_id, biz_id, w3_account, ext) -> Session
         若 thread_id 已存在且 biz_id 不匹配 → SessionBizMismatchError
+    - get_by_thread(thread_id) -> Session | None
     - list_by_user(w3_account, biz_id, limit, before) -> list[Session]
     - touch(thread_id) -> None
     """
@@ -80,6 +81,17 @@ class SessionRepository:
             thread_id,
         )
         assert row is not None  # just inserted
+        return _row_to_session(row)
+
+    async def get_by_thread(self, *, thread_id: str) -> Session | None:
+        row = await self._conn.fetchrow(
+            "SELECT thread_id, biz_id, w3_account, title, status, "
+            "created_at, updated_at, last_message_at, ext "
+            "FROM ma_session WHERE thread_id = $1",
+            thread_id,
+        )
+        if row is None:
+            return None
         return _row_to_session(row)
 
     async def list_by_user(

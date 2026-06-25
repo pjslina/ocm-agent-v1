@@ -74,3 +74,22 @@ async def test_session_list_by_user_returns_recent_first(
     items = await repo.list_by_user(w3_account="bob", biz_id="biz_x", limit=10, before=None)
     thread_ids = [s.thread_id for s in items]
     assert set(thread_ids) == {"th_a", "th_b", "th_c"}
+
+
+@pytest.mark.asyncio
+async def test_get_by_thread_returns_session(pg_conn: asyncpg.Connection) -> None:
+    from ma.core.repo.session_repository import SessionRepository
+
+    repo = SessionRepository(conn=pg_conn)
+    await repo.get_or_create(
+        thread_id="th_get",
+        biz_id="test",
+        w3_account="alice",
+    )
+    session = await repo.get_by_thread(thread_id="th_get")
+    assert session is not None
+    assert session.thread_id == "th_get"
+    assert session.w3_account == "alice"
+
+    # not exists -> None
+    assert await repo.get_by_thread(thread_id="th_nonexist") is None

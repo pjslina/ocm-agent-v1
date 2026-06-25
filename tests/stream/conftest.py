@@ -48,6 +48,9 @@ class FakeSessionRepo:
         )
         return self.sessions[thread_id]
 
+    async def get_by_thread(self, *, thread_id: str) -> Session | None:
+        return self.sessions.get(thread_id)
+
     async def touch(self, thread_id: str) -> None: ...
 
 
