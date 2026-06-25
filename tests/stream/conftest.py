@@ -48,6 +48,9 @@ class FakeSessionRepo:
         )
         return self.sessions[thread_id]
 
+    async def get_by_thread(self, *, thread_id: str) -> Session | None:
+        return self.sessions.get(thread_id)
+
     async def touch(self, thread_id: str) -> None: ...
 
 
@@ -93,10 +96,16 @@ def _topic_config(intent_responses: list[str] | None = None):
                 "params": {
                     "provider": "fake",
                     "model": "fake-model",
-                    "labels": ["metagc"],
+                    "labels": ["metagc", "uniioc", "knowledge_center"],
                     "prompt_template": "p.txt",
-                    "fake_responses": intent_responses or ["route: metagc\nreason: ok"],
+                    "fake_responses": intent_responses
+                    or [
+                        "route: metagc\nreason: ok",
+                        "route: uniioc\nreason: ok",
+                        "route: knowledge_center\nreason: ok",
+                    ],
                 },
+                "retry": {"max_attempts": 1, "backoff_ms": 0},
             },
             "graph": {
                 "nodes": [
@@ -105,14 +114,31 @@ def _topic_config(intent_responses: list[str] | None = None):
                         "adapter": "metagc",
                         "output": True,
                         "params": {"base_url": "http://unused", "timeout_ms": 5000},
-                    }
+                        "retry": {"max_attempts": 1, "backoff_ms": 0},
+                    },
+                    {
+                        "id": "uniioc_adapter",
+                        "adapter": "uniioc",
+                        "output": True,
+                        "params": {"base_url": "http://unused"},
+                    },
+                    {
+                        "id": "kc_adapter",
+                        "adapter": "knowledge_center",
+                        "output": True,
+                        "params": {"ws_url": "ws://unused"},
+                    },
                 ],
                 "edges": [
                     {
                         "from": "intent",
                         "type": "conditional",
                         "route_by": "route",
-                        "mapping": {"metagc": "metagc_adapter"},
+                        "mapping": {
+                            "metagc": "metagc_adapter",
+                            "uniioc": "uniioc_adapter",
+                            "knowledge_center": "kc_adapter",
+                        },
                     }
                 ],
             },
@@ -146,6 +172,8 @@ def fresh_registry(monkeypatch):
         "ma.plugins.enrich.generic_enrich",
         "ma.plugins.intent.llm_classifier",
         "ma.plugins.adapter.metagc",
+        "ma.plugins.adapter.uniioc",
+        "ma.plugins.adapter.knowledge_center",
     ]:
         sys.modules.pop(modname, None)
         importlib.import_module(modname)
@@ -157,6 +185,8 @@ def fresh_registry(monkeypatch):
         "ma.plugins.enrich.generic_enrich",
         "ma.plugins.intent.llm_classifier",
         "ma.plugins.adapter.metagc",
+        "ma.plugins.adapter.uniioc",
+        "ma.plugins.adapter.knowledge_center",
     ]:
         sys.modules.pop(modname, None)
 

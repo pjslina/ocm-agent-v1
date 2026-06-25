@@ -123,10 +123,9 @@ async def list_messages(
 
     async with sess_factory.acquire() as conn:
         sess_repo = sess_factory.build(conn)
-        # 拿 session 验证归属
-        sessions = await sess_repo.list_by_user(w3_account=w3, biz_id=None, limit=200, before=None)
-        owned = next((s for s in sessions if s.thread_id == thread_id), None)
-        if owned is None:
+        # 拿 session 验证归属（O(1) 直查，不再 O(N) list+filter）
+        session = await sess_repo.get_by_thread(thread_id=thread_id)
+        if session is None or session.w3_account != w3:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"unknown thread_id: {thread_id}",

@@ -153,7 +153,14 @@ class ChatService:
                 ev = event.get("event")
                 if ev == "on_custom_event":
                     name = event.get("name")
-                    if name in {"thinking", "progress", "delta", "tool", "error"}:
+                    if name == "error":
+                        data = event.get("data") or {}
+                        code = data.get("code", "INTERNAL")
+                        friendly = topic.error_messages.get(code)
+                        if friendly:
+                            data = {**data, "message": friendly}
+                        yield ChatEvent(type="error", data=data)
+                    elif name in {"thinking", "progress", "delta", "tool"}:
                         yield ChatEvent(type=name, data=event.get("data") or {})
         except Exception:
             _log.exception("chat_loop_error")
@@ -236,13 +243,21 @@ class ChatService:
         sg.add_node(
             "intent_node",
             make_intent_node(  # type: ignore[arg-type]
-                topic.intent, default_route=topic.default_route, labels=labels
+                topic.intent,
+                default_route=topic.default_route,
+                labels=labels,
+                retry=topic.intent_retry,
             ),
         )
 
         # adapter 节点们
         for node_id, adapter in topic.adapters.items():
-            sg.add_node(node_id, make_adapter_node(adapter, output=True))  # type: ignore[arg-type]
+            sg.add_node(
+                node_id,
+                make_adapter_node(  # type: ignore[arg-type]
+                    adapter, output=True, retry=topic.adapter_retries.get(node_id)
+                ),
+            )
 
         sg.add_node("persist_node", persist_node)  # type: ignore[arg-type]
 

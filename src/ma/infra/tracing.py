@@ -34,3 +34,11 @@ def configure_tracing(settings: Settings) -> None:
             BatchSpanProcessor(OTLPSpanExporter(endpoint=settings.otel_exporter_otlp_endpoint))
         )
     trace.set_tracer_provider(provider)
+
+    # M3: 接入 LangChain instrumentation（自动为 LLM 调用 + LangGraph 节点创建 spans）
+    try:
+        from openinference.instrumentation.langchain import LangChainInstrumentor
+
+        LangChainInstrumentor().instrument()
+    except ImportError:
+        pass

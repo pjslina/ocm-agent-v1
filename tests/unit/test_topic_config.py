@@ -105,3 +105,75 @@ def test_topic_config_intent_labels_match_mapping_keys() -> None:
     }
     with pytest.raises(ValidationError, match="labels"):
         TopicConfig.model_validate(bad)
+
+
+def test_topic_config_with_retry_policy() -> None:
+    """验证 YAML 中 node.retry 字段可被正确解析。"""
+    from ma.core.topic.config import TopicConfig
+
+    data = {
+        "topic_id": "test",
+        "display_name": "Test",
+        "default_route": "metagc",
+        "history": {"max_turns": 5, "scope": "per_topic"},
+        "auth": {"plugin": "representative_auth", "params": {"required_role": "REP"}},
+        "enrich": {"plugin": "generic_enrich", "params": {"fields_to_inject": ["region"]}},
+        "intent": {
+            "plugin": "llm_classifier",
+            "params": {
+                "provider": "fake",
+                "model": "m",
+                "labels": ["metagc"],
+                "prompt_template": "p.txt",
+                "fake_responses": ["route: metagc\nreason: ok"],
+            },
+            "retry": {"max_attempts": 3, "backoff_ms": 500},
+        },
+        "graph": {
+            "nodes": [
+                {
+                    "id": "metagc_adapter",
+                    "adapter": "metagc",
+                    "output": True,
+                    "params": {"base_url": "http://x", "timeout_ms": 5000},
+                    "retry": {"max_attempts": 2, "backoff_ms": 1000},
+                }
+            ],
+            "edges": [
+                {
+                    "from": "intent",
+                    "type": "conditional",
+                    "route_by": "route",
+                    "mapping": {"metagc": "metagc_adapter"},
+                }
+            ],
+        },
+        "biz_params_schema": {
+            "type": "object",
+            "required": ["region"],
+            "properties": {"region": {"type": "string"}},
+        },
+        "error_messages": {
+            "FORBIDDEN_TOPIC": "x",
+            "FORBIDDEN_SCOPE": "x",
+            "DOWNSTREAM_TIMEOUT": "x",
+            "DOWNSTREAM_ERROR": "x",
+            "INTERNAL": "x",
+        },
+    }
+    cfg = TopicConfig.model_validate(data)
+    assert cfg.intent.retry is not None
+    assert cfg.intent.retry.max_attempts == 3
+    assert cfg.intent.retry.backoff_ms == 500
+    assert cfg.graph.nodes[0].retry is not None
+    assert cfg.graph.nodes[0].retry.max_attempts == 2
+    assert cfg.graph.nodes[0].retry.backoff_ms == 1000
+
+
+def test_retry_policy_defaults() -> None:
+    """RetryPolicy 默认值：不 retry（max_attempts=1, backoff_ms=1000）。"""
+    from ma.core.topic.config import RetryPolicy
+
+    r = RetryPolicy()
+    assert r.max_attempts == 1
+    assert r.backoff_ms == 1000

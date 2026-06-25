@@ -22,6 +22,9 @@ dependencies = [
     "alembic>=1.13,<2",
     "langgraph>=0.2.50,<0.3",
     "langchain-core>=0.3,<0.4",
+    "websockets>=16.0",
+    "langchain-openai>=0.3.35",
+    "openinference-instrumentation-langchain>=0.1.66",
 ]
 
 [dependency-groups]
