@@ -21,10 +21,12 @@ intent:
   params:
     provider: fake
     model: fake-model
-    labels: [metagc]
+    labels: [metagc, uniioc, knowledge_center]
     prompt_template: prompts/intent/jingying.txt
     fake_responses:
       - "route: metagc\nreason: 经营数据查询"
+      - "route: uniioc\nreason: 统一运维查询"
+      - "route: knowledge_center\nreason: 知识库检索"
   retry:
     max_attempts: 2
     backoff_ms: 1000
@@ -41,12 +43,34 @@ graph:
         max_attempts: 2
         backoff_ms: 2000
 
+    - id: uniioc_adapter
+      adapter: uniioc
+      output: true
+      params:
+        base_url: ${env:MA_UNIIOC_BASE_URL}
+        timeout_ms: 30000
+      retry:
+        max_attempts: 2
+        backoff_ms: 2000
+
+    - id: kc_adapter
+      adapter: knowledge_center
+      output: true
+      params:
+        ws_url: ${env:MA_KC_WS_URL}
+        timeout_ms: 30000
+      retry:
+        max_attempts: 2
+        backoff_ms: 2000
+
   edges:
     - from: intent
       type: conditional
       route_by: route
       mapping:
         metagc: metagc_adapter
+        uniioc: uniioc_adapter
+        knowledge_center: kc_adapter
 
 biz_params_schema:
   type: object

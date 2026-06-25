@@ -88,6 +88,8 @@ def fresh_registry(monkeypatch):
         "ma.plugins.enrich.generic_enrich",
         "ma.plugins.intent.llm_classifier",
         "ma.plugins.adapter.metagc",
+        "ma.plugins.adapter.uniioc",
+        "ma.plugins.adapter.knowledge_center",
     ]:
         sys.modules.pop(modname, None)
         importlib.import_module(modname)
@@ -115,9 +117,13 @@ def _build_topic(metagc_url: str):
                 "params": {
                     "provider": "fake",
                     "model": "fake-model",
-                    "labels": ["metagc"],
+                    "labels": ["metagc", "uniioc", "knowledge_center"],
                     "prompt_template": "p.txt",
-                    "fake_responses": ["route: metagc\nreason: 业务"],
+                    "fake_responses": [
+                        "route: metagc\nreason: 业务",
+                        "route: uniioc\nreason: 运维",
+                        "route: knowledge_center\nreason: 知识",
+                    ],
                 },
             },
             "graph": {
@@ -127,14 +133,30 @@ def _build_topic(metagc_url: str):
                         "adapter": "metagc",
                         "output": True,
                         "params": {"base_url": metagc_url, "timeout_ms": 5000},
-                    }
+                    },
+                    {
+                        "id": "uniioc_adapter",
+                        "adapter": "uniioc",
+                        "output": True,
+                        "params": {"base_url": "http://unused"},
+                    },
+                    {
+                        "id": "kc_adapter",
+                        "adapter": "knowledge_center",
+                        "output": True,
+                        "params": {"ws_url": "ws://unused"},
+                    },
                 ],
                 "edges": [
                     {
                         "from": "intent",
                         "type": "conditional",
                         "route_by": "route",
-                        "mapping": {"metagc": "metagc_adapter"},
+                        "mapping": {
+                            "metagc": "metagc_adapter",
+                            "uniioc": "uniioc_adapter",
+                            "knowledge_center": "kc_adapter",
+                        },
                     }
                 ],
             },
