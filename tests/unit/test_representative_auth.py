@@ -1,4 +1,4 @@
-"""representative_auth：基于 GraphState.identity.raw_claims["role"] 决定通过/拒绝。"""
+"""representative_auth：基于 role + region 范围决定通过/拒绝。"""
 
 from __future__ import annotations
 
@@ -29,12 +29,18 @@ async def test_auth_passes_with_matching_role() -> None:
 
     plugin = registry.create("auth", "representative_auth", {"required_role": "REP"})
     state = {
-        "identity": AuthnIdentity(w3_account="alice", raw_claims={"role": "REP"}),
+        "identity": AuthnIdentity(
+            w3_account="alice",
+            raw_claims={"role": "REP", "regions": ["huadong"]},
+        ),
+        "biz_params": {"region": "huadong"},
     }
     result = await plugin.authorize(state)
     assert result.passed is True
     assert result.user_ctx is not None
     assert result.user_ctx["role"] == "REP"
+    assert result.user_ctx["regions"] == ["huadong"]
+    assert result.user_ctx["region"] == "huadong"
 
 
 @pytest.mark.asyncio
@@ -43,7 +49,11 @@ async def test_auth_rejects_with_wrong_role() -> None:
 
     plugin = registry.create("auth", "representative_auth", {"required_role": "REP"})
     state = {
-        "identity": AuthnIdentity(w3_account="bob", raw_claims={"role": "VIEWER"}),
+        "identity": AuthnIdentity(
+            w3_account="bob",
+            raw_claims={"role": "VIEWER", "regions": ["huadong"]},
+        ),
+        "biz_params": {"region": "huadong"},
     }
     result = await plugin.authorize(state)
     assert result.passed is False
@@ -57,8 +67,65 @@ async def test_auth_rejects_when_no_role_claim() -> None:
 
     plugin = registry.create("auth", "representative_auth", {"required_role": "REP"})
     state = {
-        "identity": AuthnIdentity(w3_account="ghost", raw_claims={}),
+        "identity": AuthnIdentity(
+            w3_account="ghost",
+            raw_claims={"regions": ["huadong"]},
+        ),
+        "biz_params": {"region": "huadong"},
     }
     result = await plugin.authorize(state)
     assert result.passed is False
     assert result.reject_code == "FORBIDDEN_TOPIC"
+
+
+@pytest.mark.asyncio
+async def test_auth_rejects_when_region_not_in_allowed() -> None:
+    from ma.core.plugin.registry import registry
+
+    plugin = registry.create("auth", "representative_auth", {"required_role": "REP"})
+    state = {
+        "identity": AuthnIdentity(
+            w3_account="alice",
+            raw_claims={"role": "REP", "regions": ["huadong", "huabei"]},
+        ),
+        "biz_params": {"region": "huanan"},
+    }
+    result = await plugin.authorize(state)
+    assert result.passed is False
+    assert result.reject_code == "FORBIDDEN_SCOPE"
+
+
+@pytest.mark.asyncio
+async def test_auth_rejects_when_biz_params_missing_region() -> None:
+    from ma.core.plugin.registry import registry
+
+    plugin = registry.create("auth", "representative_auth", {"required_role": "REP"})
+    state = {
+        "identity": AuthnIdentity(
+            w3_account="alice",
+            raw_claims={"role": "REP", "regions": ["huadong"]},
+        ),
+        "biz_params": {},
+    }
+    result = await plugin.authorize(state)
+    assert result.passed is False
+    assert result.reject_code == "FORBIDDEN_SCOPE"
+
+
+@pytest.mark.asyncio
+async def test_auth_passes_with_region_in_allowed() -> None:
+    from ma.core.plugin.registry import registry
+
+    plugin = registry.create("auth", "representative_auth", {"required_role": "REP"})
+    state = {
+        "identity": AuthnIdentity(
+            w3_account="alice",
+            raw_claims={"role": "REP", "regions": ["huadong"]},
+        ),
+        "biz_params": {"region": "huadong"},
+    }
+    result = await plugin.authorize(state)
+    assert result.passed is True
+    assert result.user_ctx is not None
+    assert result.user_ctx["region"] == "huadong"
+    assert result.user_ctx["regions"] == ["huadong"]

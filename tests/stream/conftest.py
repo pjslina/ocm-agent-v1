@@ -205,7 +205,10 @@ def make_request(
         question=question,
         request_id=request_id,
         biz_params={"region": region},
-        identity=AuthnIdentity(w3_account="alice", raw_claims={"role": role}),
+        identity=AuthnIdentity(
+            w3_account="alice",
+            raw_claims={"role": role, "regions": [region]},
+        ),
     )
 
 

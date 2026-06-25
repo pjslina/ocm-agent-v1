@@ -191,7 +191,10 @@ async def test_chat_service_happy_path():
             question="销售额？",
             request_id="req_happy",
             biz_params={"region": "huadong"},
-            identity=AuthnIdentity(w3_account="alice", raw_claims={"role": "REP"}),
+            identity=AuthnIdentity(
+                w3_account="alice",
+                raw_claims={"role": "REP", "regions": ["huadong"]},
+            ),
         )
         events = [ev async for ev in svc.handle(req)]
 

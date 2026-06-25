@@ -1,7 +1,8 @@
 """代表小管家鉴权插件。
 
-M1 简化实现：从 GraphState.identity.raw_claims 中读取 role，与 required_role 比对。
-M2 起接外部用户中心 API 拉真实角色 + 客户归属 + 客户级权限。
+M2 实现：从 GraphState.identity.raw_claims 中读取 role + regions，与 required_role
+和 biz_params.region 比对。
+M3 起接外部用户中心 API 拉真实角色 + 客户归属 + 客户级权限。
 """
 
 from __future__ import annotations
@@ -44,4 +45,24 @@ class RepresentativeAuth:
                 reject_code="FORBIDDEN_TOPIC",
                 reject_message=f"该专题仅限 {self._required_role} 角色访问。",
             )
-        return AuthResult(passed=True, user_ctx={"role": role})
+
+        biz_params = state.get("biz_params", {})
+        region = biz_params.get("region")
+        allowed_regions = claims.get("regions", [])
+        if region is None:
+            return AuthResult(
+                passed=False,
+                reject_code="FORBIDDEN_SCOPE",
+                reject_message="请求缺少 region 参数。",
+            )
+        if region not in allowed_regions:
+            return AuthResult(
+                passed=False,
+                reject_code="FORBIDDEN_SCOPE",
+                reject_message=f"您无权访问 {region} 大区数据。",
+            )
+
+        return AuthResult(
+            passed=True,
+            user_ctx={"role": role, "regions": allowed_regions, "region": region},
+        )
