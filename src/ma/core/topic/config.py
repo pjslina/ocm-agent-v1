@@ -20,9 +20,17 @@ class PluginRef(BaseModel):
     params: dict[str, Any] = Field(default_factory=dict)
 
 
+class RetryPolicy(BaseModel):
+    """M3: 节点级可配置重试策略。"""
+
+    max_attempts: int = Field(ge=1, le=5, default=1)
+    backoff_ms: int = Field(ge=0, le=30000, default=1000)
+
+
 class IntentRef(BaseModel):
     plugin: str
     params: dict[str, Any]
+    retry: RetryPolicy | None = None  # M3: intent 节点也可 retry
 
 
 class GraphNode(BaseModel):
@@ -30,6 +38,7 @@ class GraphNode(BaseModel):
     adapter: str
     params: dict[str, Any] = Field(default_factory=dict)
     output: bool = True
+    retry: RetryPolicy | None = None  # M3: 可选 retry 配置
 
 
 class ConditionalEdge(BaseModel):

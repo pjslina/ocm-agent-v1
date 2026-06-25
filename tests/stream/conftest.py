@@ -97,6 +97,7 @@ def _topic_config(intent_responses: list[str] | None = None):
                     "prompt_template": "p.txt",
                     "fake_responses": intent_responses or ["route: metagc\nreason: ok"],
                 },
+                "retry": {"max_attempts": 1, "backoff_ms": 0},
             },
             "graph": {
                 "nodes": [
@@ -105,6 +106,7 @@ def _topic_config(intent_responses: list[str] | None = None):
                         "adapter": "metagc",
                         "output": True,
                         "params": {"base_url": "http://unused", "timeout_ms": 5000},
+                        "retry": {"max_attempts": 1, "backoff_ms": 0},
                     }
                 ],
                 "edges": [

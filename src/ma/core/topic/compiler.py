@@ -14,17 +14,17 @@ from __future__ import annotations
 
 import os
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, create_model
 
 from ma.core.plugin.registry import PluginRegistry
 from ma.core.plugin.registry import registry as _global_registry
-from ma.core.topic.config import HistoryPolicy, TopicConfig
+from ma.core.topic.config import HistoryPolicy, RetryPolicy, TopicConfig
 
 
-@dataclass(slots=True)
+@dataclass(slots=False)
 class CompiledTopic:
     topic_id: str
     display_name: str
@@ -37,6 +37,9 @@ class CompiledTopic:
     biz_params_model: type[BaseModel]
     error_messages: dict[str, str]
     config: TopicConfig
+    # M3 新增
+    intent_retry: RetryPolicy | None = None
+    adapter_retries: dict[str, RetryPolicy] = field(default_factory=dict)
 
 
 _ENV_PLACEHOLDER = re.compile(r"\$\{env:([A-Z_][A-Z0-9_]*)\}")
@@ -117,6 +120,13 @@ class TopicCompiler:
 
         biz_params_model = _compile_biz_params_schema(cfg.biz_params_schema)
 
+        # M3: 提取 retry 配置
+        intent_retry = cfg.intent.retry if hasattr(cfg.intent, 'retry') else None
+        adapter_retries: dict[str, RetryPolicy] = {}
+        for node in cfg.graph.nodes:
+            if node.retry is not None:
+                adapter_retries[node.id] = node.retry
+
         return CompiledTopic(
             topic_id=cfg.topic_id,
             display_name=cfg.display_name,
@@ -129,4 +139,6 @@ class TopicCompiler:
             biz_params_model=biz_params_model,
             error_messages=cfg.error_messages,
             config=cfg,
+            intent_retry=intent_retry,
+            adapter_retries=adapter_retries,
         )

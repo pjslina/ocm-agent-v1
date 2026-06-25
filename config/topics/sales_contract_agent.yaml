@@ -25,6 +25,9 @@ intent:
     prompt_template: prompts/intent/sales_contract.txt
     fake_responses:
       - "route: metagc\nreason: 合同信息查询"
+  retry:
+    max_attempts: 2
+    backoff_ms: 1000
 
 graph:
   nodes:
@@ -34,6 +37,9 @@ graph:
       params:
         base_url: ${env:MA_METAGC_BASE_URL}
         timeout_ms: 30000
+      retry:
+        max_attempts: 2
+        backoff_ms: 2000
 
   edges:
     - from: intent

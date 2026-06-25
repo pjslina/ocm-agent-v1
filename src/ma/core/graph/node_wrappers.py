@@ -9,6 +9,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Awaitable, Callable
 from typing import Any, cast
 
@@ -24,6 +25,7 @@ from ma.core.plugin.base import (
     IntentFailed,
     IntentPlugin,
 )
+from ma.core.topic.config import RetryPolicy
 from ma.infra.logging import get_logger
 
 NodeFn = Callable[[GraphState, dict[str, Any]], Awaitable[dict[str, Any]]]
@@ -96,8 +98,16 @@ def make_enrich_node(plugin: EnrichPlugin) -> NodeFn:
     return _traced_node("enrich", node)
 
 
-def make_intent_node(plugin: IntentPlugin, *, default_route: str, labels: list[str]) -> NodeFn:
+def make_intent_node(
+    plugin: IntentPlugin,
+    *,
+    default_route: str,
+    labels: list[str],
+    retry: RetryPolicy | None = None,
+) -> NodeFn:
     label_set = set(labels)
+    max_attempts = retry.max_attempts if retry else 1
+    backoff_ms = retry.backoff_ms if retry else 0
 
     async def node(state: GraphState, config: dict[str, Any]) -> dict[str, Any]:
         await _emit(
@@ -105,72 +115,151 @@ def make_intent_node(plugin: IntentPlugin, *, default_route: str, labels: list[s
             {"phase": "intent", "label": "正在识别问题意图…"},
             config,
         )
-        try:
-            result = await plugin.classify(state)
-            if result.route not in label_set:
-                _log.warning(
-                    "intent_unknown_label",
-                    got_route=result.route,
-                    labels=list(label_set),
-                    fallback=default_route,
+        for attempt in range(1, max_attempts + 1):
+            try:
+                result = await plugin.classify(state)
+                if result.route not in label_set:
+                    _log.warning(
+                        "intent_unknown_label",
+                        got_route=result.route,
+                        labels=list(label_set),
+                        fallback=default_route,
+                    )
+                    route = default_route
+                    conf = 0.0
+                    reason = f"unknown label {result.route!r}, fallback"
+                else:
+                    route = result.route
+                    conf = result.confidence
+                    reason = result.reason
+                await _emit(
+                    "progress",
+                    {
+                        "step": "intent",
+                        "status": "done",
+                        "detail": reason,
+                        "extra": {"route": route},
+                    },
+                    config,
                 )
-                route = default_route
-                conf = 0.0
-                reason = f"unknown label {result.route!r}, fallback"
-            else:
-                route = result.route
-                conf = result.confidence
-                reason = result.reason
-            await _emit(
-                "progress",
-                {
-                    "step": "intent",
-                    "status": "done",
-                    "detail": reason,
-                    "extra": {"route": route},
-                },
-                config,
-            )
-            return {
-                "route": route,
-                "route_confidence": conf,
-                "route_reason": reason,
-            }
-        except IntentFailed as e:
-            _log.warning("intent_failed", error=str(e), fallback=default_route)
-            await _emit(
-                "progress",
-                {
-                    "step": "intent",
-                    "status": "fallback",
-                    "detail": str(e),
-                    "extra": {"route": default_route},
-                },
-                config,
-            )
-            return {
-                "route": default_route,
-                "route_confidence": 0.0,
-                "route_reason": f"intent_failed: {e}",
-            }
+                return {
+                    "route": route,
+                    "route_confidence": conf,
+                    "route_reason": reason,
+                }
+            except IntentFailed as e:
+                if attempt < max_attempts:
+                    _log.warning(
+                        "intent_failed_retry",
+                        attempt=attempt,
+                        max_attempts=max_attempts,
+                        error=str(e),
+                    )
+                    await asyncio.sleep(backoff_ms / 1000.0)
+                    continue
+                # 最后一次 fallback
+                _log.warning("intent_failed", error=str(e), fallback=default_route)
+            except Exception as e:
+                if attempt < max_attempts:
+                    _log.warning(
+                        "intent_retry",
+                        attempt=attempt,
+                        max_attempts=max_attempts,
+                        error=str(e),
+                    )
+                    await asyncio.sleep(backoff_ms / 1000.0)
+                    continue
+                _log.warning("intent_exception", error=str(e), fallback=default_route)
+
+        await _emit(
+            "progress",
+            {
+                "step": "intent",
+                "status": "fallback",
+                "detail": f"retried {max_attempts}x",
+                "extra": {"route": default_route},
+            },
+            config,
+        )
+        return {
+            "route": default_route,
+            "route_confidence": 0.0,
+            "route_reason": "intent_retry_exhausted",
+        }
 
     return _traced_node("intent", node)
 
 
-def make_adapter_node(adapter: DownstreamAdapter, *, output: bool) -> NodeFn:
+def make_adapter_node(
+    adapter: DownstreamAdapter, *, output: bool, retry: RetryPolicy | None = None
+) -> NodeFn:
+    max_attempts = retry.max_attempts if retry else 1
+    backoff_ms = retry.backoff_ms if retry else 0
+
     async def node(state: GraphState, config: dict[str, Any]) -> dict[str, Any]:
         chunks: list[str] = []
-        async for ev in adapter.run(state, output=output):
-            if ev.type == "delta":
-                chunks.append(ev.data["content"])
+        last_error: dict[str, Any] | None = None
+
+        for attempt in range(1, max_attempts + 1):
+            try:
+                async for ev in adapter.run(state, output=output):
+                    if ev.type == "delta":
+                        chunks.append(ev.data["content"])
+                        if output:
+                            await _emit("delta", ev.data, config)
+                    elif ev.type == "tool":
+                        if output:
+                            await _emit("tool", ev.data, config)
+                    elif ev.type == "error":
+                        if ev.data.get("retryable", False) and attempt < max_attempts:
+                            last_error = ev.data
+                            break  # 退出内层循环，触发 retry
+                        # 非 retryable 或最后一次尝试：透出 error 然后退出
+                        await _emit("error", ev.data, config)
+                        if output:
+                            return {"answer_chunks": chunks}
+                        return {"answer_chunks": []}
+                else:
+                    # 正常完成（没有 break）
+                    if output:
+                        return {"answer_chunks": chunks}
+                    return {"answer_chunks": []}
+            except Exception as e:
+                if attempt < max_attempts:
+                    _log.warning(
+                        "adapter_retry",
+                        attempt=attempt,
+                        max_attempts=max_attempts,
+                        error=str(e),
+                    )
+                    await asyncio.sleep(backoff_ms / 1000.0)
+                    continue
+                # 最后一次抛异常 → 透出 error
+                await _emit(
+                    "error",
+                    {
+                        "code": "DOWNSTREAM_ERROR",
+                        "message": f"调用下游失败（重试{max_attempts}次后放弃）",
+                        "retryable": False,
+                    },
+                    config,
+                )
                 if output:
-                    await _emit("delta", ev.data, config)
-            elif ev.type == "tool":
-                if output:
-                    await _emit("tool", ev.data, config)
-            elif ev.type == "error":
-                await _emit("error", ev.data, config)
-                break
+                    return {"answer_chunks": chunks}
+                return {"answer_chunks": []}
+
+            # retryable error → 等待后重试
+            if last_error is not None and attempt < max_attempts:
+                _log.warning(
+                    "adapter_retry_recoverable",
+                    attempt=attempt,
+                    max_attempts=max_attempts,
+                    error=last_error,
+                )
+                await asyncio.sleep(backoff_ms / 1000.0)
+                last_error = None
+                continue
+
         if output:
             return {"answer_chunks": chunks}
         return {"answer_chunks": []}
