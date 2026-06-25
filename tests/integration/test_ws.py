@@ -116,12 +116,27 @@ async def test_ws_ask_event_flow(monkeypatch: pytest.MonkeyPatch, tmp_path):
     (topics_dir / "test.yaml").write_text(yaml.dump(topic_yaml), encoding="utf-8")
     monkeypatch.setenv("MA_CONFIG_TOPICS_DIR", str(topics_dir))
 
-    # 修复：fresh_registry autouse fixture（来自 test_metagc_with_real_port.py）
-    # 把 metagc 注册到了临时 registry 里，导致 sys.modules 中缓存的模块
-    # 关联的 registry 引用不对。此处清除缓存，让 load_all_plugins() 重新注册。
+    # 清除全局 plugin registry 及所有持有旧引用的模块，避免 PluginConflict 和
+    # PluginNotFound（前一个 fixture 已注册过插件，且 compiler/main 缓存了旧 registry）
     import sys as _sys
+    from ma.core.plugin import registry as registry_module
 
-    _sys.modules.pop("ma.plugins.adapter.metagc", None)
+    new_reg = registry_module.PluginRegistry()
+    monkeypatch.setattr(registry_module, "registry", new_reg)
+    # 清除所有持有旧 registry 引用的模块缓存
+    for _modname in (
+        "ma.plugins.adapter.knowledge_center",
+        "ma.plugins.adapter.metagc",
+        "ma.plugins.adapter.uniioc",
+        "ma.plugins.auth.jingying_auth",
+        "ma.plugins.auth.representative_auth",
+        "ma.plugins.auth.sales_contract_auth",
+        "ma.plugins.enrich.generic_enrich",
+        "ma.plugins.intent.llm_classifier",
+        "ma.core.topic.compiler",
+        "ma.main",
+    ):
+        _sys.modules.pop(_modname, None)
 
     from ma.main import create_app
 
