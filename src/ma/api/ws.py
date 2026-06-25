@@ -10,7 +10,7 @@ import json
 from typing import Any
 
 import ulid
-from fastapi import APIRouter, Request, WebSocket, WebSocketDisconnect, status
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect, status
 from fastapi.websockets import WebSocketState
 
 from ma.core.chat_service import ChatRequest, ChatService
@@ -63,7 +63,7 @@ def _new_request_id() -> str:
 
 
 @router.websocket("/chat/ws")
-async def chat_ws(websocket: WebSocket, request: Request) -> None:
+async def chat_ws(websocket: WebSocket) -> None:
     await websocket.accept()
 
     # --- 从 query params 拿上下文（M4 占位，M5 接 AuthnMiddleware） ---
@@ -89,8 +89,8 @@ async def chat_ws(websocket: WebSocket, request: Request) -> None:
     bind_request_ctx(w3_account=w3_account)
     log.info("ws_connected", w3_account=w3_account, biz_id=biz_id)
 
-    chat_service: ChatService | None = request.app.state.chat_service
-    topic_registry: TopicRegistry = request.app.state.topic_registry
+    chat_service: ChatService | None = websocket.app.state.chat_service
+    topic_registry: TopicRegistry = websocket.app.state.topic_registry
 
     if chat_service is None:
         await websocket.send_text(
