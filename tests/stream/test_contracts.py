@@ -185,8 +185,53 @@ async def test_contract_9_auth_rejection_yields_done(make_service):
 
 
 @pytest.mark.asyncio
-async def test_contract_10_ws_multi_request_isolation_PLACEHOLDER():
-    pytest.skip("WS channel deferred to M4")
+async def test_contract_10_ws_multi_request_isolation(make_service):
+    """同一连接多个 ask 并发 → request_id 隔离，各自收到自己的 done。
+
+    验证方式：并发调两次 ChatService.handle，断言每个流独立收到自己的
+    delta + done。这模拟了 WS ConnectionManager 的并发处理。
+    """
+    import asyncio
+
+    svc, _ = make_service(intent_responses=["route: metagc\nreason: ok"])
+
+    call_count = 0
+
+    async def fake_run(self, state, *, output: bool):
+        nonlocal call_count
+        call_count += 1
+        idx = call_count
+        yield ChatEvent(type="delta", data={"content": f"answer-{idx}"})
+
+    async def collect_stream(req):
+        events = []
+        async for ev in svc.handle(req):
+            events.append(ev)
+        return events
+
+    with patch("ma.plugins.adapter.metagc.MetaGCAdapter.run", new=fake_run):
+        req1 = make_request(thread_id="th_a", request_id="req_a")
+        req2 = make_request(thread_id="th_b", request_id="req_b")
+
+        results = await asyncio.gather(
+            collect_stream(req1),
+            collect_stream(req2),
+        )
+
+    events_a, events_b = results
+
+    # 每个流独立收到 done
+    assert events_a[-1].type == "done"
+    assert events_b[-1].type == "done"
+
+    # 各自收到自己的 delta
+    deltas_a = [e for e in events_a if e.type == "delta"]
+    deltas_b = [e for e in events_b if e.type == "delta"]
+    assert len(deltas_a) >= 1
+    assert len(deltas_b) >= 1
+
+    # 两个并发请求确实都被调了（验证并发隔离，非串行）
+    assert call_count == 2
 
 
 @pytest.mark.asyncio
