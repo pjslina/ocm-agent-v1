@@ -25,7 +25,7 @@ import yaml  # type: ignore[import-untyped]
 from fastapi import FastAPI
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 
-from ma.api import health, rest, sse
+from ma.api import health, rest, sse, ws
 from ma.core.chat_service import ChatService
 from ma.core.plugin.bootstrap import load_all_plugins
 from ma.core.repo.message_repository import MessageRepository
@@ -127,6 +127,7 @@ def create_app() -> FastAPI:
     app.include_router(health.router, prefix="/api/v1")
     app.include_router(sse.router, prefix="/api/v1")
     app.include_router(rest.router, prefix="/api/v1")
+    app.include_router(ws.router, prefix="/api/v1")
     FastAPIInstrumentor().instrument_app(app)
     return app
 

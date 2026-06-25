@@ -37,6 +37,9 @@ dev = [
     "testcontainers[postgres]>=4.8,<5",
 ]
 
+[project.scripts]
+ma-replay = "ma.cli.replay:main"
+
 [tool.uv]
 package = true
 

@@ -224,6 +224,9 @@ def make_adapter_node(
                     if output:
                         return {"answer_chunks": chunks}
                     return {"answer_chunks": []}
+            except asyncio.CancelledError:
+                # WS 断开 / task cancel → 保留已收集的 chunks，不 emit error
+                return {"answer_chunks": chunks, "stream_cancelled": True}
             except Exception as e:
                 if attempt < max_attempts:
                     _log.warning(

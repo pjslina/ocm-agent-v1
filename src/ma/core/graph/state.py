@@ -56,3 +56,4 @@ class GraphState(TypedDict, total=False):
     # ── 持久化辅助 ──────────────────────
     user_message_id: str  # ChatService 写入 user 消息后填回，供 persist 节点关联
     assistant_message_id: str  # 同上
+    stream_cancelled: bool  # adapter 因 WS 断开 / task cancel 提前终止

@@ -51,3 +51,62 @@ def encode_sse(event: ChatEvent) -> str:
 def encode_keepalive() -> str:
     """SSE 注释行作为心跳，浏览器 EventSource 自动忽略。"""
     return ": keep-alive\n\n"
+
+
+# ---------------------------------------------------------------------------
+# WebSocket 双向 JSON 协议（设计书 §4.3.2）
+# ---------------------------------------------------------------------------
+
+
+def encode_ws(event: ChatEvent, request_id: str) -> str:
+    """ChatEvent → WS JSON 帧（服务端→客户端 event）。设计书 §4.3.2。"""
+    frame = {
+        "op": "event",
+        "request_id": request_id,
+        "event": event.type,
+        "data": event.data,
+    }
+    return json.dumps(frame, ensure_ascii=False, separators=(",", ":"))
+
+
+def encode_ws_ready(version: str = "0.2.0", heartbeat_interval_s: int = 20) -> str:
+    """握手成功后的 ready 帧。"""
+    return json.dumps(
+        {"op": "ready", "server_version": version, "heartbeat_interval_s": heartbeat_interval_s},
+        ensure_ascii=False,
+    )
+
+
+def encode_ws_pong() -> str:
+    """心跳应答。"""
+    return json.dumps({"op": "pong"}, ensure_ascii=False)
+
+
+def encode_ws_closed(reason: str) -> str:
+    """服务端主动关闭通知。"""
+    return json.dumps({"op": "closed", "reason": reason}, ensure_ascii=False)
+
+
+# WS 客户端帧的合法 op 值
+_WS_CLIENT_OPS = frozenset({"ask", "cancel", "ping"})
+
+
+class WSFrameError(ValueError):
+    """WS 帧格式不合法。"""
+
+
+def decode_ws_frame(raw: str) -> dict[str, Any]:
+    """解析客户端 WS JSON 帧 → dict。
+
+    返回 dict 保证含 `op` key；其它字段 caller 自行 get。
+    """
+    try:
+        frame = json.loads(raw)
+    except json.JSONDecodeError as e:
+        raise WSFrameError(f"invalid JSON: {e}") from e
+    if not isinstance(frame, dict):
+        raise WSFrameError("frame must be a JSON object")
+    op = frame.get("op")
+    if op not in _WS_CLIENT_OPS:
+        raise WSFrameError(f"unknown or missing op: {op!r}")
+    return frame
