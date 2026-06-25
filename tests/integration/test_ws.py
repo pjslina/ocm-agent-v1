@@ -119,6 +119,7 @@ async def test_ws_ask_event_flow(monkeypatch: pytest.MonkeyPatch, tmp_path):
     # 清除全局 plugin registry 及所有持有旧引用的模块，避免 PluginConflict 和
     # PluginNotFound（前一个 fixture 已注册过插件，且 compiler/main 缓存了旧 registry）
     import sys as _sys
+
     from ma.core.plugin import registry as registry_module
 
     new_reg = registry_module.PluginRegistry()
