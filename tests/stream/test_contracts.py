@@ -121,8 +121,45 @@ async def test_contract_7_persist_marks_partial_when_no_chunks(make_service):
 
 
 @pytest.mark.asyncio
-async def test_contract_8_retry_transparent_to_user_PLACEHOLDER():
-    pytest.skip("retry not implemented until M3 (design book §6.6.1)")
+async def test_contract_8_retry_transparent_to_user(make_service):
+    """retry 对用户透明：adapter 可重试的错误不会暴露给 SSE 流。
+
+    模拟：adapter 第一次抛 retryable error，第二次成功 → 用户只看到一个 delta，
+    不会看到中间 error。
+    """
+    from ma.core.topic.config import RetryPolicy
+
+    svc, _ = make_service()
+
+    # make_service 默认 retry.max_attempts=1（不重试），需要 patch 为 2 才能验证
+    # retry 透明性（call_count==2）。
+    svc._topics._by_id["test_topic"].adapter_retries["metagc_adapter"] = RetryPolicy(
+        max_attempts=2, backoff_ms=0
+    )
+
+    call_count = 0
+
+    async def fake_run(self, state, *, output: bool):
+        nonlocal call_count
+        call_count += 1
+        if call_count == 1:
+            yield ChatEvent(
+                type="error",
+                data={"code": "DOWNSTREAM_ERROR", "message": "retryable", "retryable": True},
+            )
+        else:
+            yield ChatEvent(type="delta", data={"content": "最终成功"})
+
+    with patch("ma.plugins.adapter.metagc.MetaGCAdapter.run", new=fake_run):
+        events = await collect(svc, make_request())
+
+    deltas = [e for e in events if e.type == "delta"]
+    errors = [e for e in events if e.type == "error"]
+    # 用户看不到中间 retryable error
+    assert len(errors) == 0
+    assert len(deltas) >= 1
+    assert deltas[0].data["content"] == "最终成功"
+    assert call_count == 2  # 确实重试了一次
 
 
 @pytest.mark.asyncio

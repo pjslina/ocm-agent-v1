@@ -153,7 +153,14 @@ class ChatService:
                 ev = event.get("event")
                 if ev == "on_custom_event":
                     name = event.get("name")
-                    if name in {"thinking", "progress", "delta", "tool", "error"}:
+                    if name == "error":
+                        data = event.get("data") or {}
+                        code = data.get("code", "INTERNAL")
+                        friendly = topic.error_messages.get(code)
+                        if friendly:
+                            data = {**data, "message": friendly}
+                        yield ChatEvent(type="error", data=data)
+                    elif name in {"thinking", "progress", "delta", "tool"}:
                         yield ChatEvent(type=name, data=event.get("data") or {})
         except Exception:
             _log.exception("chat_loop_error")
