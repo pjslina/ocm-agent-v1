@@ -23,6 +23,7 @@ dependencies = [
     "langgraph>=0.2.50,<0.3",
     "langchain-core>=0.3,<0.4",
     "websockets>=16.0",
+    "langchain-openai>=0.3.35",
 ]
 
 [dependency-groups]
