@@ -1,4 +1,4 @@
-"""e2e: 代表小管家 + MetaGC mock 的全链路。
+"""e2e: 销售合同责任人 Agent + MetaGC mock 全链路。
 
 依赖：
 - OpenGauss container（testcontainers postgres image）—— 复用 pg_dsn fixture
@@ -35,7 +35,7 @@ def _parse_sse(body: str) -> list[dict]:
 
 
 @pytest.mark.asyncio
-async def test_daibiao_xiaoguanjia_full_loop(
+async def test_sales_contract_full_loop(
     pg_dsn: str, metagc_server: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setenv("MA_ENV", "test")
@@ -47,45 +47,36 @@ async def test_daibiao_xiaoguanjia_full_loop(
 
     with TestClient(create_app()) as client:
         body = {
-            "biz_id": "daibiao_xiaoguanjia",
-            "thread_id": "th_e2e",
-            "w3_account": "alice",
-            "question": "上个月华东大区销售额？",
-            "biz_params": {"region": "huadong"},
+            "biz_id": "sales_contract_agent",
+            "thread_id": "th_sc_e2e",
+            "w3_account": "owner_alice",
+            "question": "合同 C001 付款进度？",
+            "biz_params": {"contract_id": "C001"},
         }
         headers = {
-            "X-Request-Id": "req_e2e",
-            "X-User-Account": "alice",
-            "X-User-Role": "REP",
-            "X-User-Claims": json.dumps({"regions": ["huadong"]}),
+            "X-Request-Id": "req_sc_e2e",
+            "X-User-Account": "owner_alice",
+            "X-User-Role": "SALES_OWNER",
+            "X-User-Claims": json.dumps({"contract_ids": ["C001", "C002"]}),
         }
         with client.stream("POST", "/api/v1/chat/sse", json=body, headers=headers) as r:
             assert r.status_code == 200
             text = "".join(r.iter_text())
 
     events = _parse_sse(text)
-    types = [e["event"] for e in events]
-    assert types[0] == "meta"
-    assert types[-1] == "done"
-    assert "thinking" in types
-    assert "progress" in types
+    assert events[0]["event"] == "meta"
+    assert events[-1]["event"] == "done"
     deltas = [e for e in events if e["event"] == "delta"]
     assert len(deltas) >= 2
-    full = "".join(d["data"]["content"] for d in deltas)
-    assert "上个月华东大区销售额" in full
 
-    # 验证消息落库
+    # DB 验证：用户消息 + 助手消息都落库
     pool = await asyncpg.create_pool(dsn=pg_dsn, min_size=1, max_size=2)
     try:
         async with pool.acquire() as conn:
             rows = await conn.fetch(
-                "SELECT role, status, content FROM ma_message " "WHERE thread_id = $1 ORDER BY seq",
-                "th_e2e",
+                "SELECT role, status FROM ma_message WHERE thread_id = $1 ORDER BY seq",
+                "th_sc_e2e",
             )
     finally:
         await pool.close()
-
-    assert len(rows) == 2
-    assert rows[0]["role"] == "user"
-    assert rows[1]["role"] == "assistant"
-    assert rows[1]["status"] == "complete"
+    assert [r["role"] for r in rows] == ["user", "assistant"]

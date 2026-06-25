@@ -25,18 +25,27 @@ class _FakeSessionRepo:
     async def get_or_create(
         self, *, thread_id: str, biz_id: str, w3_account: str, ext: Any = None
     ) -> Session:
-        if thread_id not in self.sessions:
-            self.sessions[thread_id] = Session(
-                thread_id=thread_id,
-                biz_id=biz_id,
-                w3_account=w3_account,
-                title=None,
-                status="active",
-                created_at=datetime.now(),
-                updated_at=datetime.now(),
-                last_message_at=None,
-                ext=ext or {},
-            )
+        if thread_id in self.sessions:
+            existing = self.sessions[thread_id]
+            if existing.biz_id != biz_id:
+                from ma.core.repo.models import SessionBizMismatchError
+
+                raise SessionBizMismatchError(
+                    f"thread_id={thread_id} already bound to biz_id={existing.biz_id}, "
+                    f"cannot reuse with biz_id={biz_id}"
+                )
+            return existing
+        self.sessions[thread_id] = Session(
+            thread_id=thread_id,
+            biz_id=biz_id,
+            w3_account=w3_account,
+            title=None,
+            status="active",
+            created_at=datetime.now(),
+            updated_at=datetime.now(),
+            last_message_at=None,
+            ext=ext or {},
+        )
         return self.sessions[thread_id]
 
     async def touch(self, thread_id: str) -> None: ...
@@ -182,7 +191,10 @@ async def test_chat_service_happy_path():
             question="销售额？",
             request_id="req_happy",
             biz_params={"region": "huadong"},
-            identity=AuthnIdentity(w3_account="alice", raw_claims={"role": "REP"}),
+            identity=AuthnIdentity(
+                w3_account="alice",
+                raw_claims={"role": "REP", "regions": ["huadong"]},
+            ),
         )
         events = [ev async for ev in svc.handle(req)]
 

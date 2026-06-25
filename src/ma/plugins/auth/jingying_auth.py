@@ -1,8 +1,7 @@
-"""代表小管家鉴权插件。
+"""经营小助手鉴权插件。
 
-M2 实现：从 GraphState.identity.raw_claims 中读取 role + regions，与 required_role
-和 biz_params.region 比对。
-M3 起接外部用户中心 API 拉真实角色 + 客户归属 + 客户级权限。
+M2 实现：role 必须在 allowed_roles 内，且 biz_params.business_unit 必须在
+identity.raw_claims.business_units 内。
 """
 
 from __future__ import annotations
@@ -16,18 +15,18 @@ from ma.core.plugin.base import AuthResult
 from ma.core.plugin.registry import registry
 
 
-class RepresentativeAuthParams(BaseModel):
-    required_role: str
+class JingyingAuthParams(BaseModel):
+    allowed_roles: list[str]
 
 
 @registry.register
-class RepresentativeAuth:
-    name = "representative_auth"
+class JingyingAuth:
+    name = "jingying_auth"
     plugin_kind = "auth"
 
     def configure(self, params: dict[str, Any]) -> None:
-        p = RepresentativeAuthParams(**params)
-        self._required_role = p.required_role
+        p = JingyingAuthParams(**params)
+        self._allowed_roles = set(p.allowed_roles)
 
     async def authorize(self, state: GraphState) -> AuthResult:
         identity = state.get("identity")
@@ -39,30 +38,34 @@ class RepresentativeAuth:
             )
         claims = identity.raw_claims or {}
         role = claims.get("role")
-        if role != self._required_role:
+        if role not in self._allowed_roles:
             return AuthResult(
                 passed=False,
                 reject_code="FORBIDDEN_TOPIC",
-                reject_message=f"该专题仅限 {self._required_role} 角色访问。",
+                reject_message=f"该专题仅限 {'/'.join(sorted(self._allowed_roles))} 角色访问。",
             )
 
         biz_params = state.get("biz_params", {})
-        region = biz_params.get("region")
-        allowed_regions = claims.get("regions", [])
-        if region is None:
+        business_unit = biz_params.get("business_unit")
+        allowed_units = claims.get("business_units", [])
+        if business_unit is None:
             return AuthResult(
                 passed=False,
                 reject_code="FORBIDDEN_SCOPE",
-                reject_message="请求缺少 region 参数。",
+                reject_message="请求缺少 business_unit 参数。",
             )
-        if region not in allowed_regions:
+        if business_unit not in allowed_units:
             return AuthResult(
                 passed=False,
                 reject_code="FORBIDDEN_SCOPE",
-                reject_message=f"您无权访问 {region} 大区数据。",
+                reject_message=f"您无权访问 {business_unit} 业务单元数据。",
             )
 
         return AuthResult(
             passed=True,
-            user_ctx={"role": role, "regions": allowed_regions, "region": region},
+            user_ctx={
+                "role": role,
+                "business_units": allowed_units,
+                "business_unit": business_unit,
+            },
         )

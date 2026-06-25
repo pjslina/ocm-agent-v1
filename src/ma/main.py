@@ -25,7 +25,7 @@ import yaml  # type: ignore[import-untyped]
 from fastapi import FastAPI
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 
-from ma.api import health, sse
+from ma.api import health, rest, sse
 from ma.core.chat_service import ChatService
 from ma.core.plugin.bootstrap import load_all_plugins
 from ma.core.repo.message_repository import MessageRepository
@@ -107,6 +107,14 @@ def create_app() -> FastAPI:
         else:
             app.state.chat_service = None
 
+        # M2: 把 factory 也挂到 app.state，供 REST history 端点使用
+        if app.state.pg_pool_rw is not None:
+            app.state.session_repo_factory = sess_factory
+            app.state.message_repo_factory = msg_factory
+        else:
+            app.state.session_repo_factory = None
+            app.state.message_repo_factory = None
+
         health.mark_ready()
         log.info("startup_complete", topics=topic_registry.ids())
         yield
@@ -118,6 +126,7 @@ def create_app() -> FastAPI:
     app = FastAPI(title="MasterAgent", version="0.2.0", lifespan=lifespan)
     app.include_router(health.router, prefix="/api/v1")
     app.include_router(sse.router, prefix="/api/v1")
+    app.include_router(rest.router, prefix="/api/v1")
     FastAPIInstrumentor().instrument_app(app)
     return app
 

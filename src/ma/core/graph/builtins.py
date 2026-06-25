@@ -26,8 +26,10 @@ def make_load_session_node(
     message_repo: MessageRepository,
     max_turns: int,
 ) -> NodeFn:
-    """build load_session 节点。max_turns 是 *消息条数* 不是 *轮数*；
-    历史拼接里"按轮丢"语义在 ChatService 上层（M2 落地，M1 简化为消息数）。"""
+    """build load_session 节点。历史拼接按最近 max_turns 轮完整对话保留。
+
+    一轮 = 相邻且状态均为 complete 的 user + assistant。半轮或异常 role 顺序会被跳过。
+    """
 
     async def node(state: GraphState, config: dict[str, Any]) -> dict[str, Any]:
         identity = state["identity"]
@@ -36,26 +38,52 @@ def make_load_session_node(
             biz_id=state["biz_id"],
             w3_account=identity.w3_account,
         )
-        msgs = await message_repo.list_recent(thread_id=state["thread_id"], limit=max_turns * 2)
+        msgs = await message_repo.list_recent(thread_id=state["thread_id"], limit=max_turns * 4)
         # repo 返回 DESC，业务用正序
         msgs.reverse()
-        return {"history": msgs}
+
+        turns: list[tuple[Message, Message]] = []
+        i = 0
+        while i < len(msgs) - 1:
+            if (
+                msgs[i].role == "user"
+                and msgs[i].status == "complete"
+                and msgs[i + 1].role == "assistant"
+                and msgs[i + 1].status == "complete"
+            ):
+                turns.append((msgs[i], msgs[i + 1]))
+                i += 2
+            else:
+                i += 1
+
+        history: list[Message] = []
+        for user_msg, assistant_msg in turns[-max_turns:]:
+            history.extend((user_msg, assistant_msg))
+        return {"history": history}
 
     return node
 
 
 def make_reject_node(error_messages: dict[str, str]) -> NodeFn:
-    """build reject 节点。优先用 AuthPlugin 给的 reject_message，否则用 error_messages 兜底。"""
+    """build reject 节点。优先用 AuthPlugin 给的 reject_message，否则用 error_messages 兜底。
+
+    M2 改动：除了写 answer_chunks（供 persist 节点拼），还通过 dispatch_custom_event
+    发一条 delta 事件，让前端真的看到话术。
+    """
 
     async def node(state: GraphState, config: dict[str, Any]) -> dict[str, Any]:
+        from langchain_core.callbacks.manager import adispatch_custom_event
+
         auth = state.get("auth")
-        text: str | None = None
+        text = None
         code = "INTERNAL"
         if auth is not None:
             code = getattr(auth, "reject_code", None) or "INTERNAL"
             text = getattr(auth, "reject_message", None)
         if not text:
             text = error_messages.get(code, error_messages.get("INTERNAL", "服务异常"))
+        # M2: 让前端看到话术
+        await adispatch_custom_event("delta", {"content": text}, config=config)  # type: ignore[arg-type]
         return {"answer_chunks": [text]}
 
     return node
