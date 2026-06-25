@@ -57,6 +57,141 @@ async def test_load_session_creates_or_loads_and_fills_history() -> None:
 
 
 @pytest.mark.asyncio
+async def test_load_session_keeps_only_complete_turns() -> None:
+    """半轮（缺 assistant 或缺 user）会被丢；完整轮保留。"""
+    from ma.core.graph.builtins import make_load_session_node
+
+    fake_session_repo = MagicMock()
+    fake_session_repo.get_or_create = AsyncMock(
+        return_value=Session(
+            thread_id="th_1",
+            biz_id="b",
+            w3_account="a",
+            title=None,
+            status="active",
+            created_at=datetime.now(),
+            updated_at=datetime.now(),
+            last_message_at=None,
+            ext={},
+        )
+    )
+    fake_msg_repo = MagicMock()
+    # repo 返回 DESC：最新 user 半轮 + 两轮完整历史
+    fake_msg_repo.list_recent = AsyncMock(
+        return_value=[
+            Message(message_id="m5", thread_id="th_1", seq=5, role="user", content="q3"),
+            Message(message_id="m4", thread_id="th_1", seq=4, role="assistant", content="a2"),
+            Message(message_id="m3", thread_id="th_1", seq=3, role="user", content="q2"),
+            Message(message_id="m2", thread_id="th_1", seq=2, role="assistant", content="a1"),
+            Message(message_id="m1", thread_id="th_1", seq=1, role="user", content="q1"),
+        ]
+    )
+
+    node = make_load_session_node(
+        session_repo=fake_session_repo, message_repo=fake_msg_repo, max_turns=5
+    )
+    out = await node(
+        {"thread_id": "th_1", "biz_id": "b", "identity": MagicMock(w3_account="a")},
+        config={},
+    )
+
+    assert [m.message_id for m in out["history"]] == ["m1", "m2", "m3", "m4"]
+    fake_msg_repo.list_recent.assert_awaited_once_with(thread_id="th_1", limit=20)
+
+
+@pytest.mark.asyncio
+async def test_load_session_skips_partial_turns() -> None:
+    """user+assistant 相邻但任一消息非 complete 时，不算完整轮。"""
+    from ma.core.graph.builtins import make_load_session_node
+
+    fake_session_repo = MagicMock()
+    fake_session_repo.get_or_create = AsyncMock(
+        return_value=Session(
+            thread_id="th_1",
+            biz_id="b",
+            w3_account="a",
+            title=None,
+            status="active",
+            created_at=datetime.now(),
+            updated_at=datetime.now(),
+            last_message_at=None,
+            ext={},
+        )
+    )
+    fake_msg_repo = MagicMock()
+    fake_msg_repo.list_recent = AsyncMock(
+        return_value=[
+            Message(
+                message_id="m4",
+                thread_id="th_1",
+                seq=4,
+                role="assistant",
+                content="a2",
+                status="partial",
+            ),
+            Message(message_id="m3", thread_id="th_1", seq=3, role="user", content="q2"),
+            Message(message_id="m2", thread_id="th_1", seq=2, role="assistant", content="a1"),
+            Message(message_id="m1", thread_id="th_1", seq=1, role="user", content="q1"),
+        ]
+    )
+
+    node = make_load_session_node(
+        session_repo=fake_session_repo, message_repo=fake_msg_repo, max_turns=5
+    )
+    out = await node(
+        {"thread_id": "th_1", "biz_id": "b", "identity": MagicMock(w3_account="a")},
+        config={},
+    )
+
+    assert [m.message_id for m in out["history"]] == ["m1", "m2"]
+
+
+@pytest.mark.asyncio
+async def test_load_session_caps_to_max_turns() -> None:
+    """超过 max_turns 轮：保留最近 N 轮。"""
+    from ma.core.graph.builtins import make_load_session_node
+
+    fake_session_repo = MagicMock()
+    fake_session_repo.get_or_create = AsyncMock(
+        return_value=Session(
+            thread_id="th_1",
+            biz_id="b",
+            w3_account="a",
+            title=None,
+            status="active",
+            created_at=datetime.now(),
+            updated_at=datetime.now(),
+            last_message_at=None,
+            ext={},
+        )
+    )
+    fake_msg_repo = MagicMock()
+    fake_msg_repo.list_recent = AsyncMock(
+        return_value=[
+            Message(
+                message_id=f"m{i}",
+                thread_id="th_1",
+                seq=i,
+                role="assistant" if i % 2 == 0 else "user",
+                content=f"c{i}",
+            )
+            for i in range(8, 0, -1)
+        ]
+    )
+
+    node = make_load_session_node(
+        session_repo=fake_session_repo, message_repo=fake_msg_repo, max_turns=2
+    )
+    out = await node(
+        {"thread_id": "th_1", "biz_id": "b", "identity": MagicMock(w3_account="a")},
+        config={},
+    )
+
+    assert [m.message_id for m in out["history"]] == ["m5", "m6", "m7", "m8"]
+    fake_msg_repo.list_recent.assert_awaited_once_with(thread_id="th_1", limit=8)
+
+
+@pytest.mark.asyncio
 async def test_reject_node_emits_fixed_message_and_marks_complete() -> None:
     """reject 节点把 reject_message 写到 answer_chunks 并 dispatch delta。"""
     from unittest.mock import patch
