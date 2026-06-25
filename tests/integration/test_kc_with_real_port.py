@@ -1,4 +1,5 @@
 """KnowledgeCenterAdapter 集成测试：启 WS mock server → adapter 消费。"""
+
 from __future__ import annotations
 
 import asyncio

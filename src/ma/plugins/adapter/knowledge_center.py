@@ -3,6 +3,7 @@
 输入：state.enriched_question + state.biz_params
 输出：AsyncIterator[ChatEvent]
 """
+
 from __future__ import annotations
 
 import json
@@ -36,11 +37,13 @@ class KnowledgeCenterAdapter:
         self._timeout_ms = p.timeout_ms
 
     async def run(self, state: GraphState, *, output: bool = True) -> AsyncIterator[ChatEvent]:
-        body = json.dumps({
-            "question": state.get("enriched_question") or state.get("question", ""),
-            "biz_params": state.get("biz_params", {}),
-            "request_id": state.get("request_id"),
-        })
+        body = json.dumps(
+            {
+                "question": state.get("enriched_question") or state.get("question", ""),
+                "biz_params": state.get("biz_params", {}),
+                "request_id": state.get("request_id"),
+            }
+        )
         try:
             async with websockets.connect(
                 self._ws_url,

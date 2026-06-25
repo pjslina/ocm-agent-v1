@@ -9,6 +9,7 @@ M1 实现：
 输出协议：让 LLM 用纯文本回答，第一行 "route: <label>"，第二行可选 "reason: ..."
 正则解析 route；解析失败 → IntentFailed。
 """
+
 from __future__ import annotations
 
 import os
@@ -52,6 +53,7 @@ def _build_chat_model(params: LLMClassifierParams) -> BaseChatModel:
 
     if params.provider == "openai-compatible":
         from langchain_openai import ChatOpenAI
+
         return ChatOpenAI(
             model=params.model,
             base_url=params.base_url,

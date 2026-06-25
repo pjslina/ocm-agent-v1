@@ -1,4 +1,5 @@
 """Mock KnowledgeCenter WebSocket server：接收 JSON question → 发两条 delta + close。"""
+
 from __future__ import annotations
 
 import asyncio

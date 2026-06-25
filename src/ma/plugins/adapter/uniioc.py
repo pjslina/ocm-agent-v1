@@ -3,6 +3,7 @@
 输入：state.enriched_question + state.biz_params
 输出：AsyncIterator[ChatEvent]
 """
+
 from __future__ import annotations
 
 import json

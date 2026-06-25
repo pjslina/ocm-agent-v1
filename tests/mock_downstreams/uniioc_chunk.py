@@ -1,4 +1,5 @@
 """Mock Uniioc：HTTP POST 进来，返回 JSON lines chunk 流。"""
+
 from __future__ import annotations
 
 from fastapi import FastAPI, Request

@@ -121,7 +121,7 @@ class TopicCompiler:
         biz_params_model = _compile_biz_params_schema(cfg.biz_params_schema)
 
         # M3: 提取 retry 配置
-        intent_retry = cfg.intent.retry if hasattr(cfg.intent, 'retry') else None
+        intent_retry = cfg.intent.retry if hasattr(cfg.intent, "retry") else None
         adapter_retries: dict[str, RetryPolicy] = {}
         for node in cfg.graph.nodes:
             if node.retry is not None:

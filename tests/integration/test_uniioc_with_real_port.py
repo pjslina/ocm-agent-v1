@@ -1,4 +1,5 @@
 """UniiocAdapter 集成测试：用 uvicorn 启 mock server → adapter.run 消费。"""
+
 from __future__ import annotations
 
 import asyncio
