@@ -1,0 +1,23 @@
+target-version = "py312"
+line-length = 100
+src = ["src", "tests"]
+
+[lint]
+select = [
+    "E", "F", "W",       # pycodestyle + pyflakes
+    "I",                  # isort
+    "B",                  # bugbear
+    "UP",                 # pyupgrade
+    "ASYNC",              # async pitfalls
+    "RUF",                # ruff-specific
+]
+ignore = [
+    "E501",   # line length (formatter handles)
+    "RUF001", # ambiguous unicode chars in strings (Chinese punctuation in MA is intentional)
+    "RUF002", # ambiguous unicode chars in docstrings
+    "RUF003", # ambiguous unicode chars in comments
+]
+
+[format]
+quote-style = "double"
+indent-style = "space"
