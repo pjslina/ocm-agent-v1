@@ -8,6 +8,7 @@ M1 改动：
 
 from __future__ import annotations
 
+import json
 from collections.abc import AsyncIterator
 from typing import Any
 
@@ -45,6 +46,7 @@ async def chat_sse(
     x_request_id: str | None = Header(default=None),
     x_user_account: str | None = Header(default=None),
     x_user_role: str | None = Header(default=None),
+    x_user_claims: str | None = Header(default=None),
 ) -> StreamingResponse:
     rid = x_request_id or _new_request_id()
     bind_request_ctx(request_id=rid, thread_id=body.thread_id, w3_account=body.w3_account)
@@ -76,9 +78,21 @@ async def chat_sse(
         )
     # M1 简化：role 从可选 header X-User-Role 拿；缺省 = "REP"
     role = x_user_role or "REP"
+    # M2: 支持 X-User-Claims header（JSON 对象）作为额外 claims
+    extra_claims: dict[str, Any] = {}
+    if x_user_claims is not None:
+        try:
+            extra_claims = json.loads(x_user_claims)
+            if not isinstance(extra_claims, dict):
+                raise ValueError("X-User-Claims must be a JSON object")
+        except (ValueError, TypeError) as e:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"invalid X-User-Claims: {e}",
+            ) from e
     identity = AuthnIdentity(
         w3_account=body.w3_account,
-        raw_claims={"role": role},
+        raw_claims={"role": role, **extra_claims},
     )
 
     chat_req = ChatRequest(
