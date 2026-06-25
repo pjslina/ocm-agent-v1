@@ -163,3 +163,6 @@ site/
 
 # Type checker
 .ruff_cache/
+
+# Claude Code
+.claude/
