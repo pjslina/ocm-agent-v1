@@ -1,0 +1,57 @@
+topic_id: sales_contract_agent
+display_name: 销售合同责任人 Agent
+default_route: metagc
+
+history:
+  max_turns: 10
+  scope: per_topic
+
+auth:
+  plugin: sales_contract_auth
+  params:
+    required_role: SALES_OWNER
+
+enrich:
+  plugin: generic_enrich
+  params:
+    fields_to_inject: [contract_id]
+
+intent:
+  plugin: llm_classifier
+  params:
+    provider: fake
+    model: fake-model
+    labels: [metagc]
+    prompt_template: prompts/intent/sales_contract.txt
+    fake_responses:
+      - "route: metagc\nreason: 合同信息查询"
+
+graph:
+  nodes:
+    - id: metagc_adapter
+      adapter: metagc
+      output: true
+      params:
+        base_url: ${env:MA_METAGC_BASE_URL}
+        timeout_ms: 30000
+
+  edges:
+    - from: intent
+      type: conditional
+      route_by: route
+      mapping:
+        metagc: metagc_adapter
+
+biz_params_schema:
+  type: object
+  required: [contract_id]
+  properties:
+    contract_id:
+      type: string
+
+error_messages:
+  FORBIDDEN_TOPIC: "您暂无权限使用销售合同责任人 Agent。"
+  FORBIDDEN_SCOPE: "您不是该合同的责任人。"
+  DOWNSTREAM_TIMEOUT: "服务繁忙，请稍后再试。"
+  DOWNSTREAM_ERROR: "查询遇到问题，请稍后再试或联系管理员。"
+  INTERNAL: "服务异常，请稍后再试。"
