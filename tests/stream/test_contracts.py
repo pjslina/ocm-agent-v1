@@ -261,3 +261,28 @@ async def test_session_biz_mismatch_yields_bad_request(make_service):
     assert len(error_evs) == 1
     assert error_evs[0].data["code"] == "BAD_REQUEST"
     assert events[-1].type == "done"
+
+
+@pytest.mark.asyncio
+async def test_ws_disconnect_marks_partial(make_service):
+    """模拟 WS 断开：adapter 中途抛 CancelledError → persist 写 partial。"""
+    import asyncio
+
+    svc, (_, msg_repo) = make_service()
+
+    async def fake_run_abort(self, state, *, output: bool):
+        yield ChatEvent(type="delta", data={"content": "前一半"})
+        raise asyncio.CancelledError("ws disconnected")
+
+    with patch("ma.plugins.adapter.metagc.MetaGCAdapter.run", new=fake_run_abort):
+        events = await collect(svc, make_request())
+
+    # CancelledError 被 ChatService 捕获 → 流内不应有 error 事件冒给用户
+    errors = [e for e in events if e.type == "error"]
+    assert len(errors) == 0
+
+    # assistant message 应被 persist，状态为 partial
+    assistants = [m for m in msg_repo.messages if m.role == "assistant"]
+    assert len(assistants) == 1
+    assert assistants[0].status == "partial"
+    assert "前一半" in assistants[0].content

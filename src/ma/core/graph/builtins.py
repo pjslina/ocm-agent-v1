@@ -103,7 +103,7 @@ def make_persist_node(
     async def node(state: GraphState, config: dict[str, Any]) -> dict[str, Any]:
         chunks = state.get("answer_chunks", [])
         content = "".join(chunks)
-        status = "complete" if chunks else "partial"
+        status = "partial" if state.get("stream_cancelled") or not chunks else "complete"
         await message_repo.append(
             msg=Message(
                 message_id=state["assistant_message_id"],
