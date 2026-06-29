@@ -19,14 +19,12 @@ enrich:
 intent:
   plugin: llm_classifier
   params:
-    provider: fake
-    model: fake-model
+    provider: ${env:MA_INTENT_LLM_PROVIDER}
+    model: ${env:MA_INTENT_LLM_MODEL}
     labels: [metagc, uniioc, knowledge_center]
     prompt_template: prompts/intent/jingying.txt
-    fake_responses:
-      - "route: metagc\nreason: 经营数据查询"
-      - "route: uniioc\nreason: 统一运维查询"
-      - "route: knowledge_center\nreason: 知识库检索"
+    base_url: ${env:MA_INTENT_LLM_BASE_URL}
+    api_key: ${env:MA_INTENT_LLM_API_KEY}
   retry:
     max_attempts: 2
     backoff_ms: 1000

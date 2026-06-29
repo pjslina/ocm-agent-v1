@@ -104,8 +104,10 @@ def create_app() -> FastAPI:
         load_all_plugins()
 
         # 6. compile topics
+        # 相对于项目根目录解析（避免工作目录不同导致找不到 YAML）
+        _project_root = Path(__file__).resolve().parents[2]
         topic_registry = TopicRegistry()
-        topics_dir = Path(settings.config_topics_dir)
+        topics_dir = _project_root / settings.config_topics_dir
         if topics_dir.is_dir():
             for yaml_path in sorted(topics_dir.glob("*.yaml")):
                 raw = yaml.safe_load(yaml_path.read_text(encoding="utf-8"))
