@@ -15,10 +15,16 @@
 from __future__ import annotations
 
 import os
+import sys
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
+
+# 允许直接 `python src/ma/main.py` 启动：把项目 src/ 加入 sys.path，使
+# `from ma...` 可解析（`python -m ma.main` 与已安装包场景无需此步）。
+if __package__ in (None, ""):
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 import asyncpg
 import yaml  # type: ignore[import-untyped]
@@ -37,6 +43,20 @@ from ma.infra.db import close_pools, create_pools
 from ma.infra.logging import configure_logging, get_logger
 from ma.infra.settings import Settings
 from ma.infra.tracing import configure_tracing
+
+# OpenAPI 分组标签（在各 router 里以字符串引用，保持一致）。
+# 注：WebSocket 端点不进 OpenAPI schema，故无独立 tag，其用法见 app description。
+_OPENAPI_TAGS: list[dict[str, str]] = [
+    {"name": "Health", "description": "存活 / 就绪探针。无需 DB，smoke 模式也可用。"},
+    {
+        "name": "Chat",
+        "description": "对话流（SSE，HTTP）。需要 DB（MA_PG_DSN_RW）才可用，否则 503。",
+    },
+    {
+        "name": "History",
+        "description": "会话与消息历史查询。需要 DB；w3_account 强制从 X-User-Account header 取。",
+    },
+]
 
 
 class _RepoFactory:
@@ -123,7 +143,24 @@ def create_app() -> FastAPI:
             await close_pools(app.state.pg_pool_rw, app.state.pg_pool_ro)
         log.info("shutdown_complete")
 
-    app = FastAPI(title="MasterAgent", version="0.2.0", lifespan=lifespan)
+    app = FastAPI(
+        title="MasterAgent",
+        version="0.2.0",
+        description=(
+            "企业级智能助手服务 —— 前端（PC SSE / 移动 WS）与多个第三方 AI Agent 之间的中间桥梁。\n\n"
+            "**本地测试提示：**\n"
+            "- Swagger UI: `/docs`，ReDoc: `/redoc`，OpenAPI JSON: `/openapi.json`\n"
+            "- 对话（Chat）与历史（History）端点需要 DB（`MA_PG_DSN_RW`）；未配置时返回 503\n"
+            "- History 端点要求 `X-User-Account` header\n"
+            "- 鉴权为占位（trust_header 模式）：信任 `X-User-Account` / `X-User-Role` header\n\n"
+            "**WebSocket**（不在此 Swagger 列出，FastAPI 不把 WS 纳入 OpenAPI）：\n"
+            "`ws://<host>/api/v1/chat/ws?w3_account=zhangsan&biz_id=daibiao_xiaoguanjia`\n"
+            '协议为双向 JSON：客户端发 `{"op":"ask","request_id":"...","thread_id":"...","question":"...","biz_params":{}}`，'
+            "服务端推 ready / event / pong / closed 帧。单连接最多 5 并发，45s 无帧关闭。"
+        ),
+        openapi_tags=_OPENAPI_TAGS,
+        lifespan=lifespan,
+    )
     app.include_router(health.router, prefix="/api/v1")
     app.include_router(sse.router, prefix="/api/v1")
     app.include_router(rest.router, prefix="/api/v1")
@@ -132,5 +169,20 @@ def create_app() -> FastAPI:
     return app
 
 
+# 直接运行 main.py 时读取本地 .env（被 import 时不读，保持测试 / uvicorn 原行为）。
+# .env 是本地启动的单一环境变量来源；topic YAML 的 ${env:...} 与 OPENAI_API_KEY
+# 也由此注入 os.environ。
+if __name__ == "__main__":
+    from dotenv import load_dotenv
+
+    load_dotenv(Path(__file__).resolve().parents[2] / ".env")
+
+
 # uvicorn 入口
 app = create_app()
+
+
+if __name__ == "__main__":
+    import uvicorn
+
+    uvicorn.run(app, host="0.0.0.0", port=8000)

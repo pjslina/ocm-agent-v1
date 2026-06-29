@@ -28,13 +28,29 @@ make dev
 # 跑所有检查（lint + type + test）
 make check
 
-# 本地起服务（自动 reload）
+# 本地起服务（从 .env 读环境变量）
 make run
 ```
 
 如果本机没有 `make`（Windows 默认就没装），把每个目标里的 `python -m uv ...` 直接拷出来跑即可。
 
-环境变量：
+### 环境变量与 .env
+
+所有环境变量集中在一个 `.env` 文件里，`main.py` 直接运行时自动读取：
+
+```bash
+cp .env.example .env   # 按本机环境改值（DB DSN / MetaGC / LLM 等）
+python -m ma.main      # 或：python src/ma/main.py
+```
+
+`main.py` 仅在直接运行（`python -m ma.main` / `python src/ma/main.py`）时加载 `.env`；
+被 import（测试、`uvicorn ma.main:app`）时不加载，保持原行为。需要热重载开发时仍可用：
+
+```bash
+uvicorn ma.main:app --reload   # 此路径不读 .env，环境变量需在 shell 里 export
+```
+
+模板见 `.env.example`，关键变量：
 
 | 变量 | 必填 | 默认 | 含义 |
 |---|---|---|---|
@@ -42,8 +58,10 @@ make run
 | `MA_LOG_LEVEL` |  | `info` | `debug` / `info` / `warning` / `error` |
 | `MA_OTEL_EXPORTER_OTLP_ENDPOINT` |  | `None` | OTLP gRPC endpoint，留空则 trace 仅在内存中 |
 | `MA_OTEL_SERVICE_NAME` |  | `master-agent` | OTel resource attribute |
-| `MA_PG_DSN_RW` | 必填（生产） | — | OpenGauss / PG DSN |
+| `MA_PG_DSN_RW` | 必填（生产） | — | OpenGauss / PG DSN；留空则 smoke 模式（无 DB） |
 | `MA_METAGC_BASE_URL` | 必填（生产） | — | MetaGC 下游 base URL |
+| `MA_UNIIOC_BASE_URL` / `MA_KC_WS_URL` |  | — | 专题 YAML `${env:...}` 引用，经 os.environ 注入 |
+| `OPENAI_API_KEY` |  | — | `intent_llm_provider=openai-compatible` 时回退使用 |
 | `MA_CONFIG_TOPICS_DIR` |  | `config/topics` | YAML 目录 |
 
 ## 本地 OTel / Jaeger 验证

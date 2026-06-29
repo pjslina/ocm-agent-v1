@@ -54,13 +54,24 @@ def _serialize_message(m: Message) -> dict[str, Any]:
     }
 
 
-@router.get("/sessions")
+@router.get(
+    "/sessions",
+    tags=["History"],
+    summary="列出用户会话",
+    responses={
+        401: {"description": "缺少 X-User-Account header"},
+        400: {"description": "before 参数非 ISO 8601"},
+        503: {"description": "DB 未配置"},
+    },
+)
 async def list_sessions(
     request: Request,
-    biz_id: str | None = Query(default=None),
-    limit: int = Query(default=50, ge=1, le=200),
-    before: str | None = Query(default=None),
-    x_user_account: str | None = Header(default=None),
+    biz_id: str | None = Query(default=None, description="按专题过滤"),
+    limit: int = Query(default=50, ge=1, le=200, description="返回条数上限"),
+    before: str | None = Query(
+        default=None, description="游标：仅返回此时间点之前的会话（ISO 8601）"
+    ),
+    x_user_account: str | None = Header(default=None, description="用户账号，必填"),
 ) -> dict[str, Any]:
     """列出用户的会话。
 
@@ -98,12 +109,21 @@ async def list_sessions(
     return {"items": [_serialize_session(s) for s in items]}
 
 
-@router.get("/sessions/{thread_id}/messages")
+@router.get(
+    "/sessions/{thread_id}/messages",
+    tags=["History"],
+    summary="列出会话消息",
+    responses={
+        401: {"description": "缺少 X-User-Account header"},
+        404: {"description": "thread_id 不存在或不属于该用户"},
+        503: {"description": "DB 未配置"},
+    },
+)
 async def list_messages(
     request: Request,
     thread_id: str,
-    limit: int = Query(default=50, ge=1, le=200),
-    x_user_account: str | None = Header(default=None),
+    limit: int = Query(default=50, ge=1, le=200, description="返回条数上限（最新在前）"),
+    x_user_account: str | None = Header(default=None, description="用户账号，必填"),
 ) -> dict[str, Any]:
     """列出某会话的消息。
 

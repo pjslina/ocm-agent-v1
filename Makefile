@@ -39,7 +39,7 @@ type:
 check: lint fmt-check type test
 
 run:
-	MA_ENV=dev python -m uv run uvicorn ma.main:app --host 0.0.0.0 --port 8000 --reload
+	python -m uv run python -m ma.main
 
 build:
 	docker build -t master-agent:dev .

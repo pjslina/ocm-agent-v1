@@ -10,6 +10,7 @@ dependencies = [
     "uvicorn[standard]>=0.32,<0.33",
     "pydantic>=2.9,<3",
     "pydantic-settings>=2.6,<3",
+    "python-dotenv>=1.0,<2",
     "structlog>=24.4,<25",
     "ulid-py>=1.1,<2",
     "opentelemetry-api>=1.27,<2",
